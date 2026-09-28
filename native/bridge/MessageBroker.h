@@ -63,6 +63,11 @@ struct DocumentUpdate {
 
 using PreviewUpdate = DocumentUpdate;
 
+// Returns an empty view when valid, otherwise a stable diagnostic reason.
+std::string_view ValidateDocumentUpdate(const DocumentUpdate& update);
+// Returns an empty string when the update violates the native protocol bounds.
+std::string SerializeDocumentUpdate(const DocumentUpdate& update, std::string* error = nullptr);
+
 class MessageBroker final : public std::enable_shared_from_this<MessageBroker> {
  public:
   using ReadyHandler = std::function<void()>;

@@ -65,6 +65,7 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   void OnControllerCreated(HRESULT result, ICoreWebView2Controller* controller);
   void OnRendererReady();
   void OnNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args);
+  void OnNavigationCompleted(ICoreWebView2NavigationCompletedEventArgs* args);
   void OnFrameNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args);
   void OnWebResourceRequested(ICoreWebView2WebResourceRequestedEventArgs* args);
   bool CreateResourceResponse(ICoreWebView2WebResourceRequestedEventArgs* args, const ResolvedResource& resource);
@@ -91,6 +92,7 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
   Microsoft::WRL::ComPtr<ICoreWebView2> webview_;
   EventRegistrationToken navigationToken_{};
+  EventRegistrationToken navigationCompletedToken_{};
   EventRegistrationToken frameNavigationToken_{};
   EventRegistrationToken resourceToken_{};
   std::optional<UINT64> allowedFrameNavigationId_;

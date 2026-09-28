@@ -16,7 +16,7 @@ Notepad Viewer Plus is a Windows Notepad++ plugin with an offline, docked multi-
 ## Invariants
 
 - Runtime operation is offline by default: no CDN, local HTTP server, PlantUML server, remote include, Swagger definition URL, or remote `$ref`. An explicit remote-image setting may allow HTTPS image requests only.
-- Every host-to-renderer `preview.update` carries protocol version 2 and a monotonically increasing generation. Stale render results must not replace newer content.
+- Every host-to-renderer `preview.update` carries protocol version 2 and a monotonically increasing generation. Stale render results must not replace newer content. Treat both `renderer.ready` and successful top-level `NavigationCompleted` as idempotent readiness signals so an early WebView2 message cannot leave the panel loading forever.
 - Treat Markdown, raw HTML, URLs, local paths, and generated SVG as untrusted. Sanitize ordinary HTML and diagram SVG separately.
 - Keep absolute filesystem paths in the native layer. Renderer resource URLs and exact-file tokens must be constrained, opaque, cryptographically random, generation-bound, and revocable.
 - WebView2 navigation and unexpected network requests are blocked; only explicitly permitted external links leave through the system browser, and the optional HTTPS-image mode is passed through the native policy.

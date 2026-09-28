@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-set(NVP_VERSION "0.2.0" CACHE STRING "Notepad Viewer Plus release version")
+set(NVP_VERSION "0.2.1" CACHE STRING "Notepad Viewer Plus release version")
 project(NotepadViewerPlus VERSION ${NVP_VERSION} LANGUAGES CXX)
 
 if(NOT WIN32)
@@ -76,10 +76,11 @@ set_target_properties(NotepadViewerPlus PROPERTIES OUTPUT_NAME "NotepadViewerPlu
 
 include(CTest)
 if(BUILD_TESTING)
-  add_executable(NotepadViewerPlusNativeTests tests/native/OriginPolicyTests.cpp tests/native/ProtocolTests.cpp tests/native/ResourcePolicyTests.cpp native/bridge/JsonWriter.cpp native/preview/ResourcePolicy.cpp)
+  add_executable(NotepadViewerPlusNativeTests tests/native/OriginPolicyTests.cpp tests/native/ProtocolTests.cpp tests/native/ResourcePolicyTests.cpp native/bridge/JsonWriter.cpp native/bridge/MessageBroker.cpp native/preview/ResourcePolicy.cpp)
   target_compile_features(NotepadViewerPlusNativeTests PRIVATE cxx_std_17)
-  target_include_directories(NotepadViewerPlusNativeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native")
-  target_link_libraries(NotepadViewerPlusNativeTests PRIVATE bcrypt)
+  target_compile_definitions(NotepadViewerPlusNativeTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  target_include_directories(NotepadViewerPlusNativeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native" "${WEBVIEW2_SDK_DIR}/build/native/include")
+  target_link_libraries(NotepadViewerPlusNativeTests PRIVATE bcrypt ole32 oleaut32)
   add_test(NAME NotepadViewerPlusNativeTests COMMAND NotepadViewerPlusNativeTests)
 endif()
 

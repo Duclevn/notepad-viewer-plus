@@ -20,19 +20,22 @@ class JsonWriter final {
   void Signed(std::int64_t value);
   void Boolean(bool value);
   [[nodiscard]] std::string Finish() &&;
+  [[nodiscard]] std::string_view Error() const noexcept;
 
   static std::string Escape(std::string_view value);
 
  private:
   struct Frame {
     bool first{true};
+    bool expectingValue{false};
   };
 
   void BeforeValue();
 
   std::string json_;
   std::vector<Frame> frames_;
-  bool expectingValue_{false};
+  bool rootWritten_{false};
+  bool invalid_{false};
 };
 
 }  // namespace mpp

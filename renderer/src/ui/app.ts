@@ -22,6 +22,7 @@ export class ViewerShell {
   ) {}
 
   public start(): void {
+    this.setStatus("Waiting for document…", "loading");
     this.bridge.subscribe((update) => {
       void this.renderUpdate(update);
     });

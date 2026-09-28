@@ -22,7 +22,6 @@ object-src 'none';
 frame-src 'self' https://doc.local;
 base-uri 'none';
 form-action 'none';
-navigate-to 'none';
 ```
 
 The native WebView2 request policy remains authoritative. HTTPS image requests are blocked unless the explicit remote-image setting is enabled. All other network, file, WebSocket, and navigation requests are denied. The top-level navigation handler accepts only `https://app.local/index.html`; diagram/math frames and the active exact PDF resource are admitted only through the child-frame navigation event, so an exact PDF token cannot replace the application page.

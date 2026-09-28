@@ -12,20 +12,26 @@ void JsonWriter::BeginObject() {
 }
 
 void JsonWriter::EndObject() {
-  if (frames_.empty()) return;
+  if (frames_.empty()) {
+    invalid_ = true;
+    return;
+  }
+  if (frames_.back().expectingValue) invalid_ = true;
   json_.push_back('}');
   frames_.pop_back();
-  expectingValue_ = false;
 }
 
 void JsonWriter::Key(std::string_view key) {
-  if (frames_.empty()) return;
+  if (frames_.empty() || frames_.back().expectingValue) {
+    invalid_ = true;
+    return;
+  }
   auto& frame = frames_.back();
   if (!frame.first) json_.push_back(',');
   frame.first = false;
   json_ += Escape(key);
   json_.push_back(':');
-  expectingValue_ = true;
+  frame.expectingValue = true;
 }
 
 void JsonWriter::String(std::string_view value) {
@@ -49,8 +55,15 @@ void JsonWriter::Boolean(bool value) {
 }
 
 std::string JsonWriter::Finish() && {
-  if (!frames_.empty() || expectingValue_) return {};
+  if (!Error().empty()) return {};
   return std::move(json_);
+}
+
+std::string_view JsonWriter::Error() const noexcept {
+  if (invalid_) return "invalid write sequence";
+  if (!rootWritten_) return "missing root value";
+  if (!frames_.empty()) return frames_.back().expectingValue ? "missing object value" : "unclosed object";
+  return {};
 }
 
 std::string JsonWriter::Escape(std::string_view value) {
@@ -81,12 +94,17 @@ std::string JsonWriter::Escape(std::string_view value) {
 }
 
 void JsonWriter::BeforeValue() {
-  if (expectingValue_) {
-    expectingValue_ = false;
+  if (frames_.empty()) {
+    if (rootWritten_) invalid_ = true;
+    rootWritten_ = true;
     return;
   }
-  // The current protocol contains objects only. A missing key is a programmer
-  // error; leave the JSON invalid rather than silently inserting a comma.
+  auto& frame = frames_.back();
+  if (!frame.expectingValue) {
+    invalid_ = true;
+    return;
+  }
+  frame.expectingValue = false;
 }
 
 }  // namespace mpp

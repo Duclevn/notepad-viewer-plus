@@ -144,9 +144,11 @@ void PreviewPanel::Dispose() {
   broker_->Detach();
   if (webview_ && resourceToken_.value != 0) webview_->remove_WebResourceRequested(resourceToken_);
   if (webview_ && navigationToken_.value != 0) webview_->remove_NavigationStarting(navigationToken_);
+  if (webview_ && navigationCompletedToken_.value != 0) webview_->remove_NavigationCompleted(navigationCompletedToken_);
   if (webview_ && frameNavigationToken_.value != 0) webview_->remove_FrameNavigationStarting(frameNavigationToken_);
   resourceToken_ = {};
   navigationToken_ = {};
+  navigationCompletedToken_ = {};
   frameNavigationToken_ = {};
   allowedFrameNavigationId_.reset();
   if (controller_) controller_->Close();
@@ -308,6 +310,17 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
           })
           .Get(),
       &navigationToken_);
+  if (FAILED(webview_->add_NavigationCompleted(
+          Callback<ICoreWebView2NavigationCompletedEventHandler>(
+              [weakSelf](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) {
+                if (const auto self = weakSelf.lock()) self->OnNavigationCompleted(args);
+                return S_OK;
+              })
+              .Get(),
+          &navigationCompletedToken_))) {
+    Fail(L"WebView2 navigation completion handler could not be installed");
+    return;
+  }
   if (FAILED(webview_->add_FrameNavigationStarting(
           Callback<ICoreWebView2NavigationStartingEventHandler>(
               [weakSelf](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) {
@@ -350,7 +363,7 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
 }
 
 void PreviewPanel::OnRendererReady() {
-  if (state_ == PreviewState::Disposed) return;
+  if (state_ != PreviewState::LoadingApplication && state_ != PreviewState::Ready) return;
   state_ = PreviewState::Ready;
   SendPendingUpdate();
 }
@@ -376,6 +389,20 @@ void PreviewPanel::OnNavigationStarting(ICoreWebView2NavigationStartingEventArgs
   // The top-level document may only be the packaged app. Exact PDF files are
   // admitted only through the child-frame event below.
   if (value != kAppUrl) args->put_Cancel(TRUE);
+}
+
+void PreviewPanel::OnNavigationCompleted(ICoreWebView2NavigationCompletedEventArgs* args) {
+  if (!args || state_ == PreviewState::Disposed || state_ == PreviewState::Failed) return;
+  BOOL succeeded = FALSE;
+  COREWEBVIEW2_WEB_ERROR_STATUS error{};
+  if (FAILED(args->get_IsSuccess(&succeeded)) || FAILED(args->get_WebErrorStatus(&error)) || succeeded == FALSE) {
+    Fail(L"Preview application navigation failed");
+    return;
+  }
+  // renderer.ready remains the primary handshake. NavigationCompleted is an
+  // idempotent fallback for hosts where an early WebMessage is missed; module
+  // scripts have completed by this point and the renderer listener is ready.
+  OnRendererReady();
 }
 
 void PreviewPanel::OnFrameNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args) {
@@ -502,7 +529,11 @@ void PreviewPanel::ShowFailureStatus(const wchar_t* reason) {
 
 void PreviewPanel::SendPendingUpdate() {
   if (state_ != PreviewState::Ready || !pendingUpdate_) return;
-  if (broker_->PostDocumentUpdate(*pendingUpdate_)) pendingUpdate_.reset();
+  if (broker_->PostDocumentUpdate(*pendingUpdate_)) {
+    pendingUpdate_.reset();
+    return;
+  }
+  Fail(L"Preview document update could not be delivered");
 }
 
 }  // namespace mpp

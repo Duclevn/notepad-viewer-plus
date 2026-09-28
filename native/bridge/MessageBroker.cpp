@@ -140,16 +140,35 @@ void MessageBroker::SetHandlers(ReadyHandler ready, LinkHandler link, LocalResou
   mismatch_ = std::move(mismatch);
 }
 
-bool MessageBroker::PostDocumentUpdate(const DocumentUpdate& update) const {
-  if (!webview_ || (update.source.kind == PreviewSourceKind::Text && update.source.text.size() > kMaximumDocumentBytes) ||
-      !IsAllowedFormat(update.formatHint) ||
-      (!update.directoryToken.empty() && !IsSafeToken(update.directoryToken)) ||
-      (update.source.kind == PreviewSourceKind::Resource &&
-       (!IsSafeToken(update.source.token) || update.source.url != "https://doc.local/file/" + update.source.token ||
-        !IsAllowedMediaType(update.source.mediaType) || !IsCompatibleResource(update.formatHint, update.source.mediaType) ||
-        update.source.size > kMaximumResourceBytes ||
-        update.source.size > update.settings.maximumResourceBytes)) ||
-      (update.source.kind == PreviewSourceKind::Text && update.source.text.size() > update.settings.maximumTextBytes)) return false;
+std::string_view ValidateDocumentUpdate(const DocumentUpdate& update) {
+  if (!IsAllowedFormat(update.formatHint)) return "unsupported format";
+  if (!update.directoryToken.empty() && !IsSafeToken(update.directoryToken)) return "invalid directory token";
+  if (update.source.kind == PreviewSourceKind::Text) {
+    if (update.source.text.size() > kMaximumDocumentBytes) return "text exceeds protocol limit";
+    if (update.source.text.size() > update.settings.maximumTextBytes) return "text exceeds configured limit";
+    return {};
+  }
+  if (update.source.kind == PreviewSourceKind::Resource) {
+    if (!IsSafeToken(update.source.token)) return "invalid resource token";
+    if (update.source.url != "https://doc.local/file/" + update.source.token) return "invalid resource URL";
+    if (!IsAllowedMediaType(update.source.mediaType)) return "unsupported resource media type";
+    if (!IsCompatibleResource(update.formatHint, update.source.mediaType)) return "resource format mismatch";
+    if (update.source.size > kMaximumResourceBytes) return "resource exceeds protocol limit";
+    if (update.source.size > update.settings.maximumResourceBytes) return "resource exceeds configured limit";
+    return {};
+  }
+  if (update.source.kind == PreviewSourceKind::Unavailable) {
+    return update.source.reason.empty() ? "missing unavailable reason" : std::string_view{};
+  }
+  return "unsupported source kind";
+}
+
+std::string SerializeDocumentUpdate(const DocumentUpdate& update, std::string* error) {
+  const std::string_view validation = ValidateDocumentUpdate(update);
+  if (!validation.empty()) {
+    if (error) error->assign(validation);
+    return {};
+  }
 
   JsonWriter writer;
   writer.BeginObject();
@@ -188,7 +207,18 @@ bool MessageBroker::PostDocumentUpdate(const DocumentUpdate& update) const {
 
   writer.Key("theme"); writer.String(update.theme);
   WriteSettings(writer, update.settings);
-  const std::string json = std::move(writer).Finish();
+  writer.EndObject();
+  const std::string_view writerError = writer.Error();
+  if (!writerError.empty()) {
+    if (error) error->assign(writerError);
+    return {};
+  }
+  return std::move(writer).Finish();
+}
+
+bool MessageBroker::PostDocumentUpdate(const DocumentUpdate& update) const {
+  if (!webview_) return false;
+  const std::string json = SerializeDocumentUpdate(update);
   if (json.empty()) return false;
   const std::wstring message = Utf8ToWide(json);
   return !message.empty() && SUCCEEDED(webview_->PostWebMessageAsJson(message.c_str()));
