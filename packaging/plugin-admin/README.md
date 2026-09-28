@@ -27,7 +27,7 @@ The resulting `NotepadViewerPlus-<version>-x64.zip` or `...-x86.zip` can be manu
 
 Restart Notepad++ after extraction. The x86 ZIP must be used with 32-bit Notepad++; the x64 ZIP must be used with 64-bit Notepad++.
 
-For the local x64 build, close Notepad++ and run `~/.pi/Generated/Install-NotepadViewerPlus-0.2.0.ps1` with PowerShell. The script discovers the standard Notepad++ installation, elevates when required, validates the ZIP, and keeps a rollback backup. Use `-NotepadRoot` or `-TargetDir` for a portable/custom installation.
+For the local x64 build, close Notepad++ and run the project-root `Install-NotepadViewerPlus-0.2.0.ps1` with PowerShell. The script discovers the standard Notepad++ installation, elevates when required, validates the ZIP, and keeps a rollback backup. Use `-NotepadRoot` or `-TargetDir` for a portable/custom installation.
 
 ## Official Plugin Admin
 
