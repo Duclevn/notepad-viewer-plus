@@ -50,6 +50,7 @@ This Windows development environment has CMake, Visual Studio 2022 Build Tools, 
 - `packaging/check-size.mjs` reports initial/lazy chunk sizes, required assets, optional ZIP size, and release-size thresholds; use `npm run size:strict` in CI. CPack creates the root-DLL ZIP, and `packaging/plugin-admin/generate-entry.mjs` calculates its SHA-256 manifest entry.
 - Regenerate `packaging/THIRD-PARTY-LICENSES.txt` with `npm run licenses` and update `docs/third-party-licenses.md` whenever runtime dependencies change. The generator includes all non-development lockfile packages.
 - Release x64 and Win32 packages separately with CPack. The Plugin Admin ZIP must keep `NotepadViewerPlus.dll` at the archive root and must not include the WebView2 Evergreen Runtime.
+- Project-local install rule: after every successful versioned build/package, create `~/.pi/Generated/Install-NotepadViewerPlus-<version>.ps1` alongside the matching ZIP. It must be a clickable/self-elevating installer, stop safely when Notepad++ is running, validate the DLL/assets payload, preserve the previous plugin directory as a rollback backup, and support `-TargetDir`/`-NotepadRoot` overrides. Keep `packaging/install-plugin.ps1` as the maintained installer template.
 
 ## Maintenance conventions
 

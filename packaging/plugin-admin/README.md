@@ -27,6 +27,8 @@ The resulting `NotepadViewerPlus-<version>-x64.zip` or `...-x86.zip` can be manu
 
 Restart Notepad++ after extraction. The x86 ZIP must be used with 32-bit Notepad++; the x64 ZIP must be used with 64-bit Notepad++.
 
+For the local x64 build, close Notepad++ and run `~/.pi/Generated/Install-NotepadViewerPlus-0.2.0.ps1` with PowerShell. The script discovers the standard Notepad++ installation, elevates when required, validates the ZIP, and keeps a rollback backup. Use `-NotepadRoot` or `-TargetDir` for a portable/custom installation.
+
 ## Official Plugin Admin
 
 A ZIP file alone does not make a plugin appear in Plugin Admin. The official list requires a public, stable HTTPS download URL and a pull request to the [Notepad++ Plugin List repository](https://github.com/notepad-plus-plus/nppPluginList). See its `src/pl.x86.json` and `src/pl.x64.json` manifests for the current schema.
