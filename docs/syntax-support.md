@@ -1,54 +1,56 @@
-# Syntax support
+# Format and syntax support
 
-Markdown Preview Plus renders the active document locally inside WebView2. The renderer does not contact a CDN or a diagram server.
+Notepad Viewer Plus renders supported content locally inside the docked WebView2 panel. Runtime operation is offline by default: there is no CDN, local HTTP server, PlantUML server, or remote OpenAPI definition.
 
-## Markdown and metadata
+## Format dispatch
 
-- Common Markdown is parsed by Markdown-it.
-- YAML front matter is recognized only at the start of the document, with an optional UTF-8 BOM. It is parsed with a non-constructing YAML schema and shown as a GitHub-style metadata table, including bounded nested maps and lists.
-- Raw HTML is enabled by default but passed through an allowlist sanitizer. The setting can disable raw HTML.
-- Relative images are served only from the current document directory after native canonical-path validation. Remote images are disabled by default; the opt-in mode permits HTTPS images only.
-- **Plugins → Markdown Preview Plus → Toggle Table of Contents** shows or hides a generated, collapsible heading list. The preference is persisted, is off by default, and lists at most the first 500 headings.
+| Input | Viewer | Source mode |
+|---|---|---|
+| `.md`, `.markdown`, `.mdown`, `.mkd` | Markdown pipeline | Live Scintilla text |
+| `.mmd`, `.mermaid` | Standalone Mermaid | Live Scintilla text |
+| `.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd` | Standalone PlantUML | Live Scintilla text |
+| `.html`, `.htm` | Scriptless HTML sandbox | Live Scintilla text |
+| `.svg` | Sanitized Blob-backed image | Live Scintilla text |
+| `.json`, `.yaml`, `.yml`, `.xml` | Bounded collapsible tree, raw fallback | Live Scintilla text |
+| `.csv`, `.tsv`, `.tab` | Bounded virtualized grid | Live Scintilla text |
+| JSON/YAML with `openapi` or `swagger: "2.0"` | Documentation-only OpenAPI view | Live Scintilla text |
+| `.pdf` | Opaque local PDF resource viewer | Saved file only |
+| `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`, `.ico`, `.avif` | Image viewer with fit/actual-size/zoom | Saved file only |
+| Other extensions | Safe plain-text fallback | Live Scintilla text |
 
-## Fences
+A manual format override is carried by protocol v2 settings and applies until the active buffer is closed. Unknown or invalid overrides fall back safely. JSON/YAML OpenAPI detection occurs after bounded parsing.
 
-The following diagram fences are recognized:
+## Markdown
 
-- `plantuml` and `puml`: rendered by the bundled MIT `@plantuml/core` runtime. Remote and arbitrary local `!include` directives are intentionally disabled.
-- `mermaid`: rendered by the bundled Mermaid Tiny runtime. Mermaid Tiny does not include mindmaps, architecture diagrams, ELK layouts, or Mermaid's internal KaTeX integration.
-- `math`: rendered by KaTeX.
-- Supported code languages are JavaScript/TypeScript, JSON, XML/HTML, CSS/SCSS, YAML, Markdown, Bash, PowerShell, Python, Java, Kotlin, C/C++, C#, SQL, Go, Rust, PHP, and Dockerfile. Highlighting is opt-in by explicit fence language; unknown languages remain escaped text.
+Common Markdown is parsed by Markdown-it. YAML front matter is recognized only at the start of the document, with an optional UTF-8 BOM. It uses a non-constructing YAML schema and is shown as bounded metadata. Raw HTML is enabled by default but passed through an allowlist sanitizer; the setting can disable raw HTML.
 
-## Math
+Relative images and links use an opaque native directory token and are served only after canonical-path validation inside the current document directory. Remote images are disabled by default; the opt-in mode permits HTTPS images only.
 
-The default delimiters are `$...$` and `$$...$$`. `\(...\)` and `\[...\]` can be enabled in settings. KaTeX runs with `trust: false`, bounded expansion, and local WOFF2 fonts.
+**Plugins → Notepad Viewer Plus → Toggle Table of Contents** shows or hides a generated, collapsible heading list. It is off by default and bounded to the first 500 headings.
 
-## Admonitions
+## Diagrams and math
 
-These forms are normalized to one safe component:
+- `plantuml` and `puml` fences use the bundled MIT `@plantuml/core` runtime. Remote and arbitrary local `!include` directives are disabled.
+- `mermaid` fences use the bundled Mermaid Tiny runtime. Mermaid Tiny does not include mindmaps, architecture diagrams, ELK layouts, or Mermaid's internal KaTeX integration.
+- Standalone Mermaid and PlantUML files are rendered as one diagram source.
+- `$...$`, `$$...$$`, and optional `\(...\)`/`\[...\]` delimiters use KaTeX with `trust: false`, bounded expansion, and local WOFF2 fonts. `math` fences are also supported.
 
-```markdown
-> [!NOTE]
-> A GitHub alert.
+## Structured and tabular data
 
-::: warning "A title"
-Container content.
-:::
+JSON, YAML, and XML trees support expand/collapse, copy path/value, line wrapping, and a raw-source fallback. Input size, depth, node count, string length, and rendered nodes are bounded. XML DTD/entity declarations and external resolution are rejected.
 
-!!! tip "A title"
-    MkDocs content.
-```
+CSV/TSV parsing supports RFC 4180-style quoted fields, escaped quotes, quoted newlines, delimiter detection, uneven rows, frozen headers, and a virtualized viewport. Formula-like values are inert text. Row, column, cell, and input limits produce a visible truncation warning.
 
-Supported styles are `note`, `tip`, `info`, `important`, `success`, `warning`, `caution`, and `danger`. Unknown styles use note styling.
+## HTML, SVG, and OpenAPI
 
-## Preview controls
+HTML is sanitized before being placed in an iframe with an empty sandbox and a restrictive frame CSP. Scripts, forms, popups, downloads, top navigation, external subresources, and author CSS are not supported.
 
-- Use **Ctrl+Alt+P** to toggle the docked preview. The shortcut can be changed through Notepad++'s Shortcut Mapper.
-- The panel starts hidden on a new installation. If it was left open, Notepad++ may restore it on the next launch; restored panels immediately render the active document.
+Standalone SVG is never inserted as active SVG in the application DOM. Scripts, event attributes, `foreignObject`, external references, CSS URLs, and unsafe image references are removed; the result is displayed through a Blob-backed image and revoked on replacement.
 
-## Known first-release limitations
+OpenAPI/Swagger is documentation-only through a pinned, locally bundled lazy Swagger UI chunk. `Try it out`, authorization, validators, remote config/definition URLs, OAuth redirects, and outgoing requests are disabled. Every `$ref` must be a same-document fragment; remote and cross-file references are rejected before rendering. A safe local summary fallback is used if the lazy chunk cannot load.
 
-- Preview export, editing in the preview, and source/preview scroll synchronization are not included.
-- PlantUML server mode, remote includes, arbitrary local includes, and optional standard-library packs are not included.
-- Mermaid support is limited to the diagrams shipped by Mermaid Tiny.
-- The native shell requires the WebView2 Evergreen Runtime and a matching x64 or Win32 plugin package.
+## Binary viewers and limits
+
+PDF and raster image bytes are delivered through an exact-file token bound to the active `(bufferId, generation, canonicalPath)`. Paths are never sent to JavaScript, binary bytes are never base64-encoded into bridge messages, and an unsaved binary buffer shows a save-first diagnostic. PDF range delivery is bounded and view-only controls are limited by the selected WebView2 viewer.
+
+The WebView2 Evergreen Runtime and a matching x64 or Win32 plugin package are required. Preview export, editing, and source/preview scroll synchronization are not included.

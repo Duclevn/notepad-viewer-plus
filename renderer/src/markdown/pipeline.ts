@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { DocumentUpdate } from "../bridge/protocol";
+import { textSource, type DocumentUpdate } from "../bridge/protocol";
 import { installAdmonitionPlugin, normalizeAdmonitions } from "./admonitions";
 import { renderCodeFence } from "./code";
 import { parseFrontMatter, type FrontMatterResult } from "./front-matter";
@@ -25,8 +25,10 @@ interface TableOfContentsHeading {
 
 export class MarkdownPipeline {
   public async render(update: DocumentUpdate): Promise<RenderResult> {
-    const frontMatter = await parseFrontMatter(update.text);
-    const source = frontMatter.hasFrontMatter ? frontMatter.body : update.text;
+    const text = textSource(update);
+    if (text === undefined) throw new Error("Markdown viewer requires a text source");
+    const frontMatter = await parseFrontMatter(text);
+    const source = frontMatter.hasFrontMatter ? frontMatter.body : text;
     const normalized = normalizeAdmonitions(source);
     const math: MathPlaceholder[] = [];
     const diagrams: DiagramPlaceholder[] = [];

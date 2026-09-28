@@ -1,21 +1,20 @@
-# Markdown Preview Plus
+# Notepad Viewer Plus
 
-Offline Markdown preview for Notepad++ with a native WebView2 shell and a TypeScript renderer.
+Offline, view-only multi-format preview for Notepad++ with a native WebView2 shell and a TypeScript viewer registry.
 
-## Implemented foundation
+## Implemented Phase 2 foundation
 
-- Dockable native Win32/WebView2 panel lifecycle state machine.
-- Generation-aware document snapshots and debounced updates.
-- Versioned JSON bridge with origin, size, URL, and path checks.
-- Markdown-it pipeline with YAML front matter, an optional generated table of contents, safe raw HTML, admonitions, math, code fences, Mermaid Tiny, and PlantUML.
-- Sandboxed math/diagram frames, strict main-page CSP, SVG sanitization, Blob-backed display, and constrained local resources.
-- Lazy renderer chunks, pinned dependencies, license inventory, size report, fixtures, and unit/security tests.
+- Dockable native Win32/WebView2 panel lifecycle with protocol-v2, generation-aware updates.
+- Public identity `NotepadViewerPlus` / “Notepad Viewer Plus”, fresh WebView2 data directory, renamed panel class, and migration from `MarkdownPreviewPlus.ini` to `NotepadViewerPlus.ini`.
+- Explicit text versus opaque exact-file source modes. PDF and image bytes never pass through the JSON bridge or `SCI_GETTEXT`.
+- Cryptographically random, generation-bound exact-file tokens with revocation, MIME allowlisting, response headers, and bounded HTTP ranges.
+- Viewer shell and registry with Markdown, standalone Mermaid/PlantUML, HTML sandbox, sanitized SVG, JSON/YAML/XML trees, CSV/TSV virtualization, image controls, safe plain-text fallback, and a view-only PDF resource viewer.
+- Offline-by-default navigation/resource policy, strict CSP, standalone/generated SVG sanitization, same-document OpenAPI `$ref` validation, and bounded parser/rendering limits.
+- Pinned dependencies, license inventory, size report, fixtures, and unit/security tests.
 
-See [`PLAN-AND-ARCHITECTURE.md`](PLAN-AND-ARCHITECTURE.md), [`docs/syntax-support.md`](docs/syntax-support.md), and [`docs/security-model.md`](docs/security-model.md).
+See [`PHASE-2-MULTI-FORMAT-PLAN.md`](PHASE-2-MULTI-FORMAT-PLAN.md), [`docs/syntax-support.md`](docs/syntax-support.md), [`docs/security-model.md`](docs/security-model.md), and [`docs/architecture-decisions/ADR-0002-phase2-isolation.md`](docs/architecture-decisions/ADR-0002-phase2-isolation.md).
 
-The preview starts hidden unless Notepad++ restores a panel that was left open. Use **Ctrl+Alt+P** or **Plugins → Markdown Preview Plus → Toggle Preview** to show or hide it. The same plugin menu contains **Toggle Table of Contents**.
-
-The proposed multi-format expansion and product rename to **Notepad Viewer Plus** are documented in [`PHASE-2-MULTI-FORMAT-PLAN.md`](PHASE-2-MULTI-FORMAT-PLAN.md). The rename has not yet been applied to binaries or package identities.
+The preview starts hidden unless Notepad++ restores a panel left open. Use **Ctrl+Alt+P** or **Plugins → Notepad Viewer Plus → Toggle Preview** to show or hide it.
 
 ## Renderer development
 
@@ -40,9 +39,14 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64 \
   -DNPP_SDK_DIR="C:/path/to/plugintemplate" \
   -DWEBVIEW2_SDK_DIR="C:/path/to/Microsoft.Web.WebView2"
 cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 cpack --config build/CPackConfig.cmake -C Release
 ```
 
-This produces an architecture-specific ZIP with `MarkdownPreviewPlus.dll` at the archive root, which is the layout required by Notepad++ Plugin Admin. See [`packaging/plugin-admin/README.md`](packaging/plugin-admin/README.md) for manual installation and official Plugin Admin submission.
+This produces an architecture-specific ZIP with `NotepadViewerPlus.dll` at the archive root, which is the layout required by Notepad++ Plugin Admin. See [`packaging/plugin-admin/README.md`](packaging/plugin-admin/README.md) for manual installation and Plugin Admin metadata.
 
 Build Win32 separately for 32-bit Notepad++. The current Windows development environment can build and test the x64 native plugin with the SDKs under `third_party/`.
+
+## Current validation limits
+
+The built-in WebView2 PDF path and Notepad++ installation/upgrade matrix still require manual smoke testing on supported WebView2/Notepad++ versions. Swagger/OpenAPI uses a locally bundled lazy UI chunk in documentation-only mode and rejects remote or cross-file `$ref` values; no network-backed Swagger configuration is used.

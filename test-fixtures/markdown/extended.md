@@ -1,5 +1,5 @@
 ---
-title: Markdown Preview Plus
+title: Notepad Viewer Plus
 tags:
   - offline
   - diagrams

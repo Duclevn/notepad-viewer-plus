@@ -16,7 +16,7 @@ const packages = Object.entries(lock.packages ?? {})
 if (packages.length === 0) throw new Error("No production packages found in package-lock.json");
 
 const sections = [
-  "Markdown Preview Plus — production runtime third-party licenses",
+  "Notepad Viewer Plus — production runtime third-party licenses",
   "Generated from the pinned renderer package-lock.json. Do not edit individual license text by hand.",
   ""
 ];

@@ -123,6 +123,37 @@ body {
 .markdown-body .mpp-front-matter-collection { display: table; width: 100%; max-width: none; margin: 0; overflow: visible; }
 .markdown-body .mpp-front-matter-collection th, .markdown-body .mpp-front-matter-collection td { text-align: center; }
 .mpp-front-matter-empty { color: var(--mpp-muted); font-style: italic; }
+
+.mpp-viewer-unavailable, .mpp-raw-fallback, .mpp-plain-text-viewer { margin: 1rem 0; padding: 1rem; border: 1px solid var(--mpp-border); border-radius: 0.4rem; background: var(--mpp-subtle-bg); white-space: pre-wrap; overflow: auto; }
+.mpp-viewer-button, .mpp-copy-value { margin: 0 0.25rem 0.25rem 0; padding: 0.25rem 0.55rem; border: 1px solid var(--mpp-border); border-radius: 0.25rem; background: var(--mpp-bg); color: var(--mpp-fg); cursor: pointer; }
+.mpp-viewer-button:hover, .mpp-copy-value:hover { border-color: var(--mpp-accent); color: var(--mpp-accent); }
+.mpp-image-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem; }
+.mpp-image-scale { color: var(--mpp-muted); margin-left: 0.5rem; }
+.mpp-image-viewport { min-height: 12rem; overflow: auto; padding: 1rem; background: repeating-conic-gradient(var(--mpp-subtle-bg) 0% 25%, var(--mpp-bg) 0% 50%) 50% / 1rem 1rem; }
+.mpp-image-viewer, .mpp-svg-viewer { display: block; max-width: none; height: auto; transform-origin: top left; }
+.mpp-image-viewer.mpp-image-fit, .mpp-svg-viewer { max-width: 100%; }
+.mpp-pdf-viewer, .mpp-html-viewer { display: block; width: 100%; min-height: 70vh; border: 1px solid var(--mpp-border); background: var(--mpp-bg); }
+.mpp-structured-viewer { line-height: 1.45; overflow-wrap: anywhere; }
+.mpp-tree-node { margin: 0.15rem 0 0.15rem 1rem; }
+.mpp-tree-node > summary { cursor: pointer; color: var(--mpp-fg); }
+.mpp-tree-value { margin: 0.15rem 0 0.15rem 1.5rem; }
+.mpp-tree-value, .mpp-tree-node > summary { font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace; font-size: 0.9rem; }
+.mpp-copy-value { font-family: inherit; font-size: 0.75rem; }
+.mpp-tree-limit { display: block; margin: 0.5rem 0 0.5rem 1rem; color: var(--mpp-muted); font-style: italic; }
+.mpp-openapi-viewer h2, .mpp-openapi-viewer h3 { margin-top: 1rem; }
+.mpp-openapi-operation { margin: 0.75rem 0; padding: 0.75rem 1rem; border: 1px solid var(--mpp-border); border-left: 0.3rem solid var(--mpp-accent); border-radius: 0.35rem; background: var(--mpp-subtle-bg); }
+.mpp-openapi-operation h3 { margin: 0 0 0.5rem; font-family: "Cascadia Code", Consolas, monospace; font-size: 1rem; }
+.mpp-muted, .mpp-delimited-info { color: var(--mpp-muted); }
+.mpp-delimited-viewer { max-width: 100%; }
+.mpp-delimited-info { margin: 0.5rem 0; }
+.mpp-delimited-header, .mpp-delimited-body { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
+.mpp-delimited-header { position: sticky; top: 0; z-index: 1; background: var(--mpp-subtle-bg); }
+.mpp-delimited-header th, .mpp-delimited-body td { min-width: 10rem; max-width: 30rem; padding: 0.35rem 0.65rem; border: 1px solid var(--mpp-border); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mpp-delimited-header th { font-weight: 600; }
+.mpp-delimited-viewport { position: relative; height: min(60vh, 32rem); overflow: auto; border: 1px solid var(--mpp-border); }
+.mpp-delimited-spacer { pointer-events: none; }
+.mpp-delimited-body { position: absolute; left: 0; top: 0; }
+
 .mpp-front-matter-fallback { width: max-content; max-width: 100%; margin: 0 0 1rem; padding: 6px 13px; border: 1px solid var(--mpp-border); background: var(--mpp-subtle-bg); }
 
 .mpp-toc { margin: 0 0 1.25rem; padding: 0.75rem 1rem; border: 1px solid var(--mpp-border); border-radius: 0.4rem; background: var(--mpp-subtle-bg); }

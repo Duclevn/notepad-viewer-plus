@@ -1,5 +1,5 @@
 import {
-  isDocumentUpdate,
+  isPreviewUpdate,
   makeReadyMessage,
   type DocumentUpdate,
   type RendererMessage
@@ -30,7 +30,7 @@ export type HostUpdateHandler = (update: DocumentUpdate) => void;
 export class RendererBridge {
   private readonly webview: WebViewBridge | undefined;
   private readonly onMessage = (event: WebViewMessageEvent): void => {
-    if (isDocumentUpdate(event.data)) {
+    if (isPreviewUpdate(event.data)) {
       for (const handler of this.handlers) handler(event.data);
     }
   };

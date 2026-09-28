@@ -84,6 +84,14 @@ export class DiagramRenderer {
   private renderQueue: Promise<void> = Promise.resolve();
   private activeCancel: (() => void) | undefined;
 
+  public dispose(): void {
+    this.activeCancel?.();
+    this.activeCancel = undefined;
+    this.frame?.cancel();
+    this.frame = undefined;
+    this.renderQueue = Promise.resolve();
+  }
+
   public renderAll(root: ParentNode, placeholders: DiagramPlaceholder[], options: DiagramRenderOptions): Promise<void> {
     this.activeCancel?.();
     this.frame?.cancel();

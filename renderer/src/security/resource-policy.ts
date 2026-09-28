@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from "../bridge/protocol";
 import type { RendererBridge } from "../bridge/bridge";
 
 const EXTERNAL_SCHEMES = new Set(["http:", "https:"]);
@@ -69,12 +70,12 @@ export function bindResourceEvents(root: HTMLElement, bridge: RendererBridge, ge
     if (isFragmentUrl(href)) return;
     event.preventDefault();
     if (isExternalHttpUrl(href)) {
-      bridge.post({ type: "link.open", protocolVersion: 1, href });
+      bridge.post({ type: "link.open", protocolVersion: PROTOCOL_VERSION, href });
       return;
     }
     const documentDirectoryToken = getDocumentDirectoryToken();
     if (makeDocumentResourceUrl(documentDirectoryToken, href)) {
-      bridge.post({ type: "localResource.open", protocolVersion: 1, href, documentDirectoryToken });
+      bridge.post({ type: "localResource.open", protocolVersion: PROTOCOL_VERSION, href, documentDirectoryToken });
     }
   });
 

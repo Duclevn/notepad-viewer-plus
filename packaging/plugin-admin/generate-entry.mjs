@@ -13,7 +13,7 @@ const required = ["zip", "arch", "version", "repository", "author", "homepage"];
 const missing = required.filter((key) => !values.get(key));
 if (missing.length > 0) {
   console.error(`Missing options: ${missing.map((key) => `--${key}=...`).join(", ")}`);
-  console.error("Example: node generate-entry.mjs --zip=release/MarkdownPreviewPlus-0.1.4-x64.zip --arch=x64 --version=0.1.4 --repository=https://github.com/example/releases/download/v0.1.4/MarkdownPreviewPlus-x64.zip");
+  console.error("Example: node generate-entry.mjs --zip=release/NotepadViewerPlus-0.2.0-x64.zip --arch=x64 --version=0.2.0 --repository=https://github.com/example/releases/download/v0.2.0/NotepadViewerPlus-0.2.0-x64.zip");
   process.exit(2);
 }
 
@@ -25,12 +25,12 @@ if (!/^https:\/\//iu.test(values.get("repository"))) throw new Error("--reposito
 
 const id = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
 const entry = {
-  "folder-name": "MarkdownPreviewPlus",
-  "display-name": "Markdown Preview Plus",
+  "folder-name": "NotepadViewerPlus",
+  "display-name": "Notepad Viewer Plus",
   version: values.get("version"),
   id,
   repository: values.get("repository"),
-  description: values.get("description") ?? "Offline Markdown preview for Notepad++ with Markdown-it, KaTeX, Mermaid Tiny, PlantUML, and syntax highlighting.",
+  description: values.get("description") ?? "Offline multi-format preview for Notepad++ with Markdown, diagrams, structured data, tabular data, images, and safe document viewers.",
   author: values.get("author"),
   homepage: values.get("homepage")
 };

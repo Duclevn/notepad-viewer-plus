@@ -1,5 +1,6 @@
 #include "MessageBroker.h"
 
+#include "JsonWriter.h"
 #include "../plugin/PluginConstants.h"
 #include "OriginPolicy.h"
 
@@ -7,9 +8,7 @@
 
 #include <charconv>
 #include <cctype>
-#include <cstdio>
 #include <limits>
-#include <sstream>
 #include <utility>
 
 using Microsoft::WRL::Callback;
@@ -65,6 +64,49 @@ bool HasExactField(std::string_view json, std::string_view key, std::size_t& val
   return false;
 }
 
+bool IsSafeToken(std::string_view value) {
+  if (value.empty() || value.size() > 256) return false;
+  for (const unsigned char character : value) {
+    if (!(std::isalnum(character) != 0 || character == '.' || character == '_' || character == '-' || character == '~')) return false;
+  }
+  return true;
+}
+
+bool IsAllowedFormat(std::string_view value) {
+  return value == "markdown" || value == "mermaid" || value == "plantuml" || value == "html" || value == "svg" ||
+         value == "json" || value == "yaml" || value == "xml" || value == "csv" || value == "tsv" || value == "openapi" ||
+         value == "pdf" || value == "image" || value == "plain-text";
+}
+
+bool IsAllowedMediaType(std::string_view value) {
+  return value == "application/pdf" || value == "image/avif" || value == "image/bmp" || value == "image/gif" ||
+         value == "image/jpeg" || value == "image/png" || value == "image/webp" || value == "image/x-icon";
+}
+
+bool IsCompatibleResource(std::string_view format, std::string_view mediaType) {
+  return (format == "pdf" && mediaType == "application/pdf") ||
+         (format == "image" && mediaType.rfind("image/", 0) == 0);
+}
+
+void WriteSettings(JsonWriter& writer, const RendererSettings& settings) {
+  writer.Key("settings");
+  writer.BeginObject();
+  writer.Key("showFrontMatter"); writer.Boolean(settings.showFrontMatter);
+  writer.Key("showTableOfContents"); writer.Boolean(settings.showTableOfContents);
+  writer.Key("rawHtml"); writer.Boolean(settings.rawHtml);
+  writer.Key("remoteImages"); writer.Boolean(settings.remoteImages);
+  writer.Key("mathAlternateDelimiters"); writer.Boolean(settings.mathAlternateDelimiters);
+  writer.Key("codeWrapping"); writer.Boolean(settings.codeWrapping);
+  writer.Key("formatOverride"); writer.String(settings.formatOverride);
+  writer.Key("maximumTextBytes"); writer.Unsigned(settings.maximumTextBytes);
+  writer.Key("maximumStructuredBytes"); writer.Unsigned(settings.maximumStructuredBytes);
+  writer.Key("maximumCsvRows"); writer.Unsigned(settings.maximumCsvRows);
+  writer.Key("maximumCsvColumns"); writer.Unsigned(settings.maximumCsvColumns);
+  writer.Key("maximumCsvCellBytes"); writer.Unsigned(settings.maximumCsvCellBytes);
+  writer.Key("maximumResourceBytes"); writer.Unsigned(settings.maximumResourceBytes);
+  writer.EndObject();
+}
+
 }  // namespace
 
 void MessageBroker::Attach(ComPtr<ICoreWebView2> webview) {
@@ -83,41 +125,73 @@ void MessageBroker::Attach(ComPtr<ICoreWebView2> webview) {
 }
 
 void MessageBroker::Detach() {
-  if (webview_ && messageToken_.value != 0) {
-    webview_->remove_WebMessageReceived(messageToken_);
-  }
+  if (webview_ && messageToken_.value != 0) webview_->remove_WebMessageReceived(messageToken_);
   messageToken_ = {};
   webview_.Reset();
 }
 
 void MessageBroker::SetHandlers(ReadyHandler ready, LinkHandler link, LocalResourceHandler localResource,
-                                 CompleteHandler complete, ErrorHandler error) {
+                                 CompleteHandler complete, ErrorHandler error, ProtocolMismatchHandler mismatch) {
   ready_ = std::move(ready);
   link_ = std::move(link);
   localResource_ = std::move(localResource);
   complete_ = std::move(complete);
   error_ = std::move(error);
+  mismatch_ = std::move(mismatch);
 }
 
 bool MessageBroker::PostDocumentUpdate(const DocumentUpdate& update) const {
-  if (!webview_ || update.text.size() > kMaximumDocumentBytes) return false;
-  std::ostringstream json;
-  json << "{\"type\":\"document.update\",\"protocolVersion\":" << kProtocolVersion
-       << ",\"generation\":" << update.generation << ",\"bufferId\":" << update.bufferId
-       << ",\"text\":\"" << EscapeJson(update.text) << "\",\"theme\":\""
-       << EscapeJson(update.theme) << "\"";
-  if (!update.documentDirectoryToken.empty()) {
-    json << ",\"documentDirectoryToken\":\"" << EscapeJson(update.documentDirectoryToken) << "\"";
+  if (!webview_ || (update.source.kind == PreviewSourceKind::Text && update.source.text.size() > kMaximumDocumentBytes) ||
+      !IsAllowedFormat(update.formatHint) ||
+      (!update.directoryToken.empty() && !IsSafeToken(update.directoryToken)) ||
+      (update.source.kind == PreviewSourceKind::Resource &&
+       (!IsSafeToken(update.source.token) || update.source.url != "https://doc.local/file/" + update.source.token ||
+        !IsAllowedMediaType(update.source.mediaType) || !IsCompatibleResource(update.formatHint, update.source.mediaType) ||
+        update.source.size > kMaximumResourceBytes ||
+        update.source.size > update.settings.maximumResourceBytes)) ||
+      (update.source.kind == PreviewSourceKind::Text && update.source.text.size() > update.settings.maximumTextBytes)) return false;
+
+  JsonWriter writer;
+  writer.BeginObject();
+  writer.Key("type"); writer.String("preview.update");
+  writer.Key("protocolVersion"); writer.Unsigned(kProtocolVersion);
+  writer.Key("generation"); writer.Unsigned(update.generation);
+  writer.Key("bufferId"); writer.Signed(update.bufferId);
+  writer.Key("formatHint"); writer.String(update.formatHint);
+
+  writer.Key("file");
+  writer.BeginObject();
+  writer.Key("name"); writer.String(update.file.name);
+  writer.Key("extension"); writer.String(update.file.extension);
+  writer.Key("saved"); writer.Boolean(update.file.saved);
+  writer.EndObject();
+  if (!update.directoryToken.empty()) {
+    writer.Key("directoryToken"); writer.String(update.directoryToken);
   }
-  json << ",\"settings\":{"
-       << "\"showFrontMatter\":" << (update.settings.showFrontMatter ? "true" : "false")
-       << ",\"showTableOfContents\":" << (update.settings.showTableOfContents ? "true" : "false")
-       << ",\"rawHtml\":" << (update.settings.rawHtml ? "true" : "false")
-       << ",\"remoteImages\":" << (update.settings.remoteImages ? "true" : "false")
-       << ",\"mathAlternateDelimiters\":" << (update.settings.mathAlternateDelimiters ? "true" : "false")
-       << ",\"codeWrapping\":" << (update.settings.codeWrapping ? "true" : "false") << "}}";
-  const std::wstring message = Utf8ToWide(json.str());
-  return SUCCEEDED(webview_->PostWebMessageAsJson(message.c_str()));
+
+  writer.Key("source");
+  writer.BeginObject();
+  if (update.source.kind == PreviewSourceKind::Text) {
+    writer.Key("kind"); writer.String("text");
+    writer.Key("text"); writer.String(update.source.text);
+  } else if (update.source.kind == PreviewSourceKind::Resource) {
+    writer.Key("kind"); writer.String("resource");
+    writer.Key("token"); writer.String(update.source.token);
+    writer.Key("url"); writer.String(update.source.url);
+    writer.Key("size"); writer.Unsigned(update.source.size);
+    writer.Key("mediaType"); writer.String(update.source.mediaType);
+  } else {
+    writer.Key("kind"); writer.String("unavailable");
+    writer.Key("reason"); writer.String(update.source.reason);
+  }
+  writer.EndObject();
+
+  writer.Key("theme"); writer.String(update.theme);
+  WriteSettings(writer, update.settings);
+  const std::string json = std::move(writer).Finish();
+  if (json.empty()) return false;
+  const std::wstring message = Utf8ToWide(json);
+  return !message.empty() && SUCCEEDED(webview_->PostWebMessageAsJson(message.c_str()));
 }
 
 void MessageBroker::OnWebMessage(ICoreWebView2WebMessageReceivedEventArgs* args) {
@@ -130,7 +204,11 @@ void MessageBroker::OnWebMessage(ICoreWebView2WebMessageReceivedEventArgs* args)
 
   std::string type;
   unsigned long long protocol = 0;
-  if (!ReadStringField(json, "type", type) || !ReadUnsignedField(json, "protocolVersion", protocol) || protocol != kProtocolVersion) return;
+  if (!ReadStringField(json, "type", type) || !ReadUnsignedField(json, "protocolVersion", protocol)) return;
+  if (protocol != kProtocolVersion) {
+    if (mismatch_) mismatch_();
+    return;
+  }
   if (type == "renderer.ready") {
     if (ready_) ready_();
     return;
@@ -215,37 +293,12 @@ bool MessageBroker::IsSafeRelativeResource(std::string_view value) {
   return true;
 }
 
-std::string MessageBroker::EscapeJson(std::string_view value) {
-  std::string escaped;
-  escaped.reserve(value.size() + 8);
-  for (const unsigned char character : value) {
-    switch (character) {
-      case '"': escaped += "\\\""; break;
-      case '\\': escaped += "\\\\"; break;
-      case '\b': escaped += "\\b"; break;
-      case '\f': escaped += "\\f"; break;
-      case '\n': escaped += "\\n"; break;
-      case '\r': escaped += "\\r"; break;
-      case '\t': escaped += "\\t"; break;
-      default:
-        if (character < 0x20) {
-          char buffer[7]{};
-          std::snprintf(buffer, sizeof(buffer), "\\u%04x", character);
-          escaped += buffer;
-        } else {
-          escaped.push_back(static_cast<char>(character));
-        }
-    }
-  }
-  return escaped;
-}
-
 std::wstring MessageBroker::Utf8ToWide(std::string_view value) {
   if (value.empty()) return {};
   const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
   if (size <= 0) return {};
   std::wstring result(static_cast<std::size_t>(size), L'\0');
-  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), result.data(), size);
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), result.data(), size) <= 0) return {};
   return result;
 }
 

@@ -9,6 +9,7 @@
 #include <WebView2.h>
 #include <wrl.h>
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -41,6 +42,11 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   void Resize();
   void QueueDocumentUpdate(DocumentUpdate update);
   bool SetDocumentDirectory(const std::string& token, const std::wstring& directory);
+  std::optional<PreviewResource> RegisterExactFile(long long bufferId, unsigned long long generation,
+                                                    const std::wstring& path, const std::string& mediaType,
+                                                    std::size_t size);
+  void ActivateDocument(long long bufferId, unsigned long long generation);
+  void RevokeResources();
   bool ResolveLocalResource(const std::string& token, const std::string& href, std::wstring& absolute) const;
   void SetSettings(Settings settings);
   void SetOpenExternalHandler(OpenExternalHandler handler);
@@ -59,7 +65,9 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   void OnControllerCreated(HRESULT result, ICoreWebView2Controller* controller);
   void OnRendererReady();
   void OnNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args);
+  void OnFrameNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args);
   void OnWebResourceRequested(ICoreWebView2WebResourceRequestedEventArgs* args);
+  bool CreateResourceResponse(ICoreWebView2WebResourceRequestedEventArgs* args, const ResolvedResource& resource);
   void Fail(const wchar_t* reason);
   void ShowFailureStatus(const wchar_t* reason);
   void SendPendingUpdate();
@@ -83,7 +91,9 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
   Microsoft::WRL::ComPtr<ICoreWebView2> webview_;
   EventRegistrationToken navigationToken_{};
+  EventRegistrationToken frameNavigationToken_{};
   EventRegistrationToken resourceToken_{};
+  std::optional<UINT64> allowedFrameNavigationId_;
 };
 
 }  // namespace mpp

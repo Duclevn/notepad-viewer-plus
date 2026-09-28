@@ -1,6 +1,6 @@
 param(
-    [string]$ZipPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'MarkdownPreviewPlus-0.1.4-x64.zip'),
-    [string]$TargetDir = 'C:\Program Files\Notepad++\plugins\MarkdownPreviewPlus'
+    [string]$ZipPath = (Join-Path $HOME '.pi\Generated\NotepadViewerPlus-0.2.0-x64.zip'),
+    [string]$TargetDir = 'C:\Program Files\Notepad++\plugins\NotepadViewerPlus'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,4 +13,4 @@ if (-not (Test-Path $TargetDir)) {
 }
 
 Expand-Archive -Path $ZipPath -DestinationPath $TargetDir -Force
-Write-Output "Installed successfully to $TargetDir. Restart Notepad++ to load the updated DLL."
+Write-Output "Installed Notepad Viewer Plus successfully to $TargetDir. Restart Notepad++ to load the updated DLL."

@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.25)
-set(MPP_VERSION "0.1.5" CACHE STRING "Markdown Preview Plus release version")
-project(MarkdownPreviewPlus VERSION ${MPP_VERSION} LANGUAGES CXX)
+set(NVP_VERSION "0.2.0" CACHE STRING "Notepad Viewer Plus release version")
+project(NotepadViewerPlus VERSION ${NVP_VERSION} LANGUAGES CXX)
 
 if(NOT WIN32)
-  message(FATAL_ERROR "Markdown Preview Plus native plugin requires Windows")
+  message(FATAL_ERROR "Notepad Viewer Plus native plugin requires Windows")
 endif()
 
 set(NPP_SDK_DIR "" CACHE PATH "Directory containing the Notepad++ plugin SDK headers")
@@ -32,6 +32,9 @@ set(NATIVE_SOURCES
   native/preview/PreviewPanel.cpp
   native/preview/ResourcePolicy.cpp
   native/bridge/MessageBroker.cpp
+  native/bridge/JsonWriter.cpp
+  native/bridge/JsonWriter.h
+  native/bridge/PreviewResource.h
   native/bridge/OriginPolicy.h
   native/settings/SettingsService.cpp
   native/settings/SettingsService.h
@@ -40,13 +43,13 @@ set(NATIVE_SOURCES
   native/preview/ResourcePolicy.h
   native/plugin/PluginEntry.h
   native/plugin/PluginConstants.h
-  native/resources/MarkdownPreviewPlus.rc
+  native/resources/NotepadViewerPlus.rc
 )
 
-add_library(MarkdownPreviewPlus SHARED ${NATIVE_SOURCES})
-target_compile_features(MarkdownPreviewPlus PRIVATE cxx_std_17)
-target_compile_definitions(MarkdownPreviewPlus PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_include_directories(MarkdownPreviewPlus PRIVATE
+add_library(NotepadViewerPlus SHARED ${NATIVE_SOURCES})
+target_compile_features(NotepadViewerPlus PRIVATE cxx_std_17)
+target_compile_definitions(NotepadViewerPlus PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(NotepadViewerPlus PRIVATE
   "${NPP_SDK_DIR}/src"
   "${NPP_SDK_DIR}/src/DockingFeature"
   "${NPP_SDK_DIR}/PowerEditor/src"
@@ -65,30 +68,31 @@ if(NOT EXISTS "${WEBVIEW2_LOADER_LIB}")
   message(FATAL_ERROR "Missing WebView2 loader library: ${WEBVIEW2_LOADER_LIB}")
 endif()
 
-target_link_libraries(MarkdownPreviewPlus PRIVATE
+target_link_libraries(NotepadViewerPlus PRIVATE
   "${WEBVIEW2_LOADER_LIB}"
-  user32 shell32 shlwapi ole32 oleaut32
+  user32 shell32 shlwapi ole32 oleaut32 bcrypt
 )
-set_target_properties(MarkdownPreviewPlus PROPERTIES OUTPUT_NAME "MarkdownPreviewPlus")
+set_target_properties(NotepadViewerPlus PROPERTIES OUTPUT_NAME "NotepadViewerPlus")
 
 include(CTest)
 if(BUILD_TESTING)
-  add_executable(MarkdownPreviewPlusNativeTests tests/native/OriginPolicyTests.cpp)
-  target_compile_features(MarkdownPreviewPlusNativeTests PRIVATE cxx_std_17)
-  target_include_directories(MarkdownPreviewPlusNativeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native")
-  add_test(NAME MarkdownPreviewPlusNativeTests COMMAND MarkdownPreviewPlusNativeTests)
+  add_executable(NotepadViewerPlusNativeTests tests/native/OriginPolicyTests.cpp tests/native/ProtocolTests.cpp tests/native/ResourcePolicyTests.cpp native/bridge/JsonWriter.cpp native/preview/ResourcePolicy.cpp)
+  target_compile_features(NotepadViewerPlusNativeTests PRIVATE cxx_std_17)
+  target_include_directories(NotepadViewerPlusNativeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native")
+  target_link_libraries(NotepadViewerPlusNativeTests PRIVATE bcrypt)
+  add_test(NAME NotepadViewerPlusNativeTests COMMAND NotepadViewerPlusNativeTests)
 endif()
 
 include(GNUInstallDirs)
-install(TARGETS MarkdownPreviewPlus RUNTIME DESTINATION .)
+install(TARGETS NotepadViewerPlus RUNTIME DESTINATION .)
 install(DIRECTORY "${RENDERER_DIST_DIR}/" DESTINATION assets)
 install(FILES packaging/THIRD-PARTY-LICENSES.txt DESTINATION .)
 
 # Notepad++ Plugin Admin accepts a ZIP whose DLL is at the archive root. CPack
 # therefore packages the install tree without adding a top-level directory.
 set(CPACK_GENERATOR "ZIP")
-set(CPACK_PACKAGE_NAME "MarkdownPreviewPlus")
-set(CPACK_PACKAGE_VERSION "${MPP_VERSION}")
-set(CPACK_PACKAGE_FILE_NAME "MarkdownPreviewPlus-${MPP_VERSION}-${WEBVIEW2_ARCH}")
+set(CPACK_PACKAGE_NAME "NotepadViewerPlus")
+set(CPACK_PACKAGE_VERSION "${NVP_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "NotepadViewerPlus-${NVP_VERSION}-${WEBVIEW2_ARCH}")
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 include(CPack)

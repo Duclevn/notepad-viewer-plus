@@ -31,6 +31,7 @@ class PluginEntry final {
   void UpdateMenuChecks();
   std::string DirectoryTokenForPath(const std::wstring& path);
   static std::wstring PluginDirectory();
+  static bool LegacyInstallationConflict();
   static void TogglePreviewCommand();
   static void RefreshPreviewCommand();
   static void ToggleAutoRefreshCommand();

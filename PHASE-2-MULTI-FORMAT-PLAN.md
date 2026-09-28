@@ -2,10 +2,12 @@
 
 ## Product Phase 2 — Multi-format preview plan
 
-**Status:** Proposed
-**Current product:** Markdown Preview Plus 0.1.5
+**Status:** In progress
+**Current product:** Markdown Preview Plus 0.1.5 baseline (tagged `v0.1.5`)
 **Target product:** Notepad Viewer Plus 0.2.0
 **Scope:** Offline, view-only previews inside the existing Notepad++ docked WebView2 panel
+
+**Implementation checkpoint:** P2.0/P2.1 are implemented in the current working tree, with the low-risk P2.2/P2.3 viewers included behind the registry. HTML/OpenAPI and PDF require the remaining isolation/compatibility validation before release sign-off. The repository remains at its user-specified local path `markdown-preview-plus`; public binary, package, settings, and WebView identities use `NotepadViewerPlus`.
 
 > This is product Phase 2. It is separate from the implementation phases in `PLAN-AND-ARCHITECTURE.md` that delivered the Markdown-only product.
 
@@ -269,57 +271,57 @@ Internal C++ namespace names can be renamed separately after the public identity
 
 **Hard prerequisite:** put the project under source control, commit the current passing state, and tag the 0.1.5 baseline before any rename. The current project root is not a Git working tree. A backup alone is not the default substitute for reviewable rename history.
 
-1. Capture the passing 0.1.5 baseline and package hashes.
-2. Apply the public identity rename and settings migration.
-3. Update `AGENTS.md`, build commands, package layout, size checker, licenses, and docs.
-4. Build, test, install, and smoke-test the renamed Markdown-only plugin before adding new formats.
-5. Test clean install, settings migration, upgrade, uninstall, and a mixed old/new installation.
+1. Capture the passing 0.1.5 baseline and package hashes. *(Completed: repository initialized, baseline commit/tag `v0.1.5`, renderer tests/build and size report recorded.)*
+2. Apply the public identity rename and settings migration. *(Completed for public binary/package/settings/WebView/window identities; the local workspace folder is retained.)*
+3. Update `AGENTS.md`, build commands, package layout, size checker, licenses, and docs. *(In progress.)*
+4. Build, test, install, and smoke-test the renamed Markdown-only plugin before adding new formats. *(Renderer/native build and tests pass; Notepad++ install smoke test remains environment-dependent.)*
+5. Test clean install, settings migration, upgrade, uninstall, and a mixed old/new installation. *(Code paths added; manual install matrix remains.)*
 
-**Exit criterion:** Notepad Viewer Plus 0.2.0-dev behaves exactly like Markdown Preview Plus 0.1.5 for Markdown; a mixed install is safely rejected; `AGENTS.md`, package layout, and build instructions consistently use the new identity.
+**Exit criterion:** Notepad Viewer Plus 0.2.0-dev behaves exactly like Markdown Preview Plus 0.1.5 for Markdown; a mixed install is safely rejected; `AGENTS.md`, package layout, and build instructions consistently use the new identity. *(Automated protocol/native/renderer coverage is complete; manual Notepad++ smoke coverage is pending.)*
 
 ### P2.1 — Multi-format core
 
-1. Introduce the native JSON serializer, protocol v2, atomic-cutover error handling, and native/TypeScript schema tests.
-2. Add file metadata, format detection, source-mode selection, and manual override before snapshot creation; binary-mode buffers must never call `SCI_GETTEXT`.
-3. Split the UI into `ViewerShell`, `ViewerRegistry`, and `MarkdownViewer`.
-4. Add exact-file resource registration, active `(bufferId, generation)` checks, revocation, MIME allowlisting, and response headers.
-5. Record the CSP/frame/worker isolation ADR and its required security regression matrix.
-6. Add per-format settings and limits.
+1. Introduce the native JSON serializer, protocol v2, atomic-cutover error handling, and native/TypeScript schema tests. *(Completed.)*
+2. Add file metadata, format detection, source-mode selection, and manual override before snapshot creation; binary-mode buffers must never call `SCI_GETTEXT`. *(Completed.)*
+3. Split the UI into `ViewerShell`, `ViewerRegistry`, and `MarkdownViewer`. *(Completed.)*
+4. Add exact-file resource registration, active `(bufferId, generation)` checks, revocation, MIME allowlisting, and response headers. *(Completed, including bounded range responses.)*
+5. Record the CSP/frame/worker isolation ADR and its required security regression matrix. *(ADR added; manual WebView2 validation remains.)*
+6. Add per-format settings and limits. *(Completed for text, structured data, CSV, and binary resource limits.)*
 
-**Exit criterion:** Markdown still passes all tests through the registry, and a test adapter proves text and resource source modes without leaking absolute paths.
+**Exit criterion:** Markdown still passes all tests through the registry, and a test adapter proves text and resource source modes without leaking absolute paths. *(Completed by registry/viewer tests and protocol resource validation.)*
 
 ### P2.2 — Low-risk visual formats
 
-1. Add standalone Mermaid and PlantUML adapters.
-2. Add raster image viewer and controls.
-3. Add sanitized SVG viewer.
-4. Add fixtures and cancellation/security tests.
+1. Add standalone Mermaid and PlantUML adapters. *(Completed.)*
+2. Add raster image viewer and controls. *(Completed.)*
+3. Add sanitized SVG viewer. *(Completed.)*
+4. Add fixtures and cancellation/security tests. *(Renderer security/cancellation coverage added; manual visual smoke remains.)*
 
 **Exit criterion:** Diagram, image, and SVG files render offline; stale output and active SVG are impossible; all frame messages verify their source window and schema.
 
 ### P2.3 — Structured text and tabular data
 
-1. Add JSON/YAML tree viewer.
-2. Add XML tree viewer.
-3. Add CSV/TSV parser and virtualized grid.
-4. Add bounded parsing/rendering, diagnostics, and large-input tests.
+1. Add JSON/YAML tree viewer. *(Completed.)*
+2. Add XML tree viewer. *(Completed.)*
+3. Add CSV/TSV parser and virtualized grid. *(Completed.)*
+4. Add bounded parsing/rendering, diagnostics, and large-input tests. *(Completed for configured renderer limits; manual stress profiling remains.)*
 
 **Exit criterion:** Representative and malformed files remain responsive, and configured size/node/row limits produce actionable warnings.
 
 ### P2.4 — Isolated document viewers
 
-1. Add scriptless HTML sandbox and safe local-resource rewriting.
-2. Add OpenAPI detection, pre-validation of every `$ref`, and the read-only Swagger UI adapter.
-3. Implement the approved frame-specific CSP design, then validate sanitization, remote `$ref` rejection, and zero network activity without weakening Markdown protections.
+1. Add scriptless HTML sandbox and safe local-resource rewriting. *(Completed.)*
+2. Add OpenAPI detection, pre-validation of every `$ref`, and the read-only locally bundled Swagger UI adapter. *(Completed; manual network/CSP smoke remains.)*
+3. Implement the approved frame-specific CSP design, then validate sanitization, remote `$ref` rejection, and zero network activity without weakening Markdown protections. *(CSP/ADR and automated sanitization checks added; manual WebView2 validation remains.)*
 
 **Exit criterion:** Hostile HTML/specification fixtures cannot execute code, navigate, submit requests, read arbitrary files, or access the network.
 
 ### P2.5 — PDF decision and implementation
 
-1. Complete the built-in WebView2 versus PDF.js ADR.
-2. Implement exact-file delivery, including ranges if required.
-3. Add loading/error states, page/zoom controls available from the selected approach, and cleanup.
-4. Test encrypted, malformed, large, and externally linked PDFs.
+1. Complete the built-in WebView2 versus PDF.js ADR. *(Spike decision remains pending supported-WebView2 smoke measurements.)*
+2. Implement exact-file delivery, including ranges if required. *(Completed for bounded native 200/206/416 responses.)*
+3. Add loading/error states, page/zoom controls available from the selected approach, and cleanup. *(Basic opaque iframe/error path completed; viewer compatibility validation remains.)*
+4. Test encrypted, malformed, large, and externally linked PDFs. *(Pending manual PDF matrix.)*
 
 **Exit criterion:** Saved PDFs render offline without exposing the path, freezing Notepad++, or allowing stale-file access.
 

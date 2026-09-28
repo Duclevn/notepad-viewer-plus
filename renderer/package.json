@@ -1,8 +1,8 @@
 {
-  "name": "markdown-preview-plus-renderer",
-  "version": "0.1.5",
+  "name": "notepad-viewer-plus-renderer",
+  "version": "0.2.0",
   "private": true,
-  "description": "Offline Markdown renderer used by the Markdown Preview Plus Notepad++ plugin",
+  "description": "Offline multi-format renderer used by the Notepad Viewer Plus Notepad++ plugin",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -23,7 +23,8 @@
     "js-yaml": "4.1.1",
     "katex": "0.18.9",
     "markdown-it": "15.0.2",
-    "markdown-it-container": "4.0.0"
+    "markdown-it-container": "4.0.0",
+    "swagger-ui-dist": "5.33.0"
   },
   "devDependencies": {
     "@types/dompurify": "3.2.0",

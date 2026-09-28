@@ -8,16 +8,25 @@ const settings = {
   rawHtml: true,
   remoteImages: false,
   mathAlternateDelimiters: true,
-  codeWrapping: true
+  codeWrapping: true,
+  formatOverride: "auto" as const,
+  maximumTextBytes: 5 * 1024 * 1024,
+  maximumStructuredBytes: 5 * 1024 * 1024,
+  maximumCsvRows: 10000,
+  maximumCsvColumns: 100,
+  maximumCsvCellBytes: 64 * 1024,
+  maximumResourceBytes: 512 * 1024 * 1024
 };
 
 function update(text: string, generation = 1): DocumentUpdate {
   return {
-    type: "document.update",
-    protocolVersion: 1,
+    type: "preview.update",
+    protocolVersion: 2,
     generation,
     bufferId: 7,
-    text,
+    formatHint: "markdown",
+    file: { name: "test.md", extension: ".md", saved: false },
+    source: { kind: "text", text },
     theme: "light",
     settings
   };

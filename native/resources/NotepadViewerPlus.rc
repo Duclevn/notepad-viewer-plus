@@ -1,8 +1,8 @@
 #include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,1,4,0
- PRODUCTVERSION 0,1,4,0
+ FILEVERSION 0,2,0,0
+ PRODUCTVERSION 0,2,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS VS_FF_DEBUG
@@ -18,12 +18,12 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "CompanyName", "Unifiedpost\0"
-      VALUE "FileDescription", "Markdown Preview Plus Notepad++ plugin\0"
-      VALUE "FileVersion", "0.1.4.0\0"
-      VALUE "InternalName", "MarkdownPreviewPlus.dll\0"
-      VALUE "OriginalFilename", "MarkdownPreviewPlus.dll\0"
-      VALUE "ProductName", "Markdown Preview Plus\0"
-      VALUE "ProductVersion", "0.1.4.0\0"
+      VALUE "FileDescription", "Notepad Viewer Plus Notepad++ plugin\0"
+      VALUE "FileVersion", "0.2.0.0\0"
+      VALUE "InternalName", "NotepadViewerPlus.dll\0"
+      VALUE "OriginalFilename", "NotepadViewerPlus.dll\0"
+      VALUE "ProductName", "Notepad Viewer Plus\0"
+      VALUE "ProductVersion", "0.2.0.0\0"
     END
   END
   BLOCK "VarFileInfo"

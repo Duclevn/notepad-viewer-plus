@@ -1,31 +1,40 @@
 # Security model
 
-Markdown Preview Plus treats the Markdown document and every generated diagram as untrusted input.
+Notepad Viewer Plus treats every document, file name, URL, parsed value, generated diagram, and specification description as untrusted input.
 
-## Renderer boundary
+## Native/renderer boundary
 
-- Host messages are schema-checked, protocol-versioned, and bounded to 5 MiB of UTF-8 document text.
-- Updates carry a monotonically increasing generation. Older asynchronous math, highlighting, or diagram results cannot replace a newer generation.
-- The WebView2 page is hosted at `https://app.local/`. Navigation and unexpected requests are blocked by the native host.
-- The page CSP uses `default-src 'none'`, local script/style/font sources, `connect-src 'none'`, and no object, form, or base support. The `https:` image source is usable only after the renderer's explicit remote-image setting preserves an HTTPS image; the default resource policy removes remote images.
+- Host messages use protocol v2, a discriminated `preview.update` schema, allowlisted format/media IDs, bounded settings, and bounded UTF-8 text.
+- Updates carry a monotonically increasing generation. Older asynchronous math, highlighting, diagram, viewer, and Blob results cannot replace a newer generation.
+- Text is carried as a text source. PDF/image data is carried only as an opaque exact-file resource descriptor; bytes are never base64-encoded into the JSON bridge and binary buffers never call `SCI_GETTEXT`.
+- The renderer receives only the file name/extension and opaque tokens. Absolute filesystem paths remain native-only.
+- Protocol cutover is atomic: unknown versions are rejected and the native panel reports an actionable mismatch instead of guessing a schema.
 
-## HTML and SVG
+## WebView2 and CSP
+
+The page is hosted at `https://app.local/`. Native navigation and web-resource interception allow packaged assets, currently active constrained resources, and explicitly enabled HTTPS images only. Unexpected HTTP(S), WebSocket, file, localhost, and top-level navigation requests are blocked.
+
+The main CSP uses `default-src 'none'`, local script/style/font sources, `connect-src 'none'`, no objects/forms/base, no worker source, and only the required `frame-src` values. `img-src` includes the valid `https:` scheme so the explicit remote-image mode can work, but renderer sanitization and the native WebView2 request handler both block HTTPS images by default. HTML receives a separate frame CSP and an empty iframe sandbox; it has no scripts, same-origin access, forms, popups, downloads, top navigation, or author CSS. See [`ADR-0002-phase2-isolation.md`](architecture-decisions/ADR-0002-phase2-isolation.md).
+
+## HTML, SVG, and OpenAPI
 
 Markdown HTML is sanitized with an explicit tag/attribute allowlist. Scripts, event attributes, frames, forms, objects, embeds, author styles, `srcdoc`, and unsafe URL protocols are removed.
 
-Mermaid and PlantUML output follows a separate policy:
+Standalone SVG and generated diagram SVG use separate policies. The sandboxed diagram frame has an opaque origin; its `postMessage` target is therefore `*`, but the parent checks the source window and uses a transferred, per-render `MessagePort` for responses.
 
-1. The SVG string is sanitized with an SVG-specific policy.
-2. Scripts, event attributes, external references, `foreignObject`, embedded images, and unsafe links are removed. Generated layout styles are retained only after external CSS URLs and import/font rules are stripped.
-3. The result is displayed through a Blob-backed `<img>`, not inserted as live SVG in the main DOM.
-4. Blob URLs are revoked when the preview is replaced.
+1. The SVG string is parsed and sanitized before display.
+2. Scripts, event attributes, external references, `foreignObject`, unsafe CSS URLs, and remote images are removed. Standalone SVG may retain only allowlisted raster data images.
+3. The safe result is displayed through a Blob-backed `<img>`, not inserted as active SVG in the main DOM.
+4. Blob URLs are revoked when the preview is replaced or disposed.
 
-## Files and links
+OpenAPI/Swagger uses a pinned local lazy UI bundle in documentation-only mode. The renderer recursively rejects every `$ref` that is not a same-document fragment before rendering. No validator URL, config URL, remote definition, OAuth redirect, authorization persistence, Try It Out operation, or network request is configured. Specification descriptions are sanitized before insertion, and a safe local fallback is used if the lazy chunk fails.
 
-The renderer receives an opaque directory token, never an absolute filesystem path. Relative image and link paths are rejected if they are absolute, use a scheme, contain traversal segments, or escape the canonical document directory. Native code resolves the token and path with `weakly_canonical` and checks the directory prefix before serving or opening a file.
+## Resource policy and lifecycle
 
-Only HTTP and HTTPS links are offered to the system browser. `javascript:`, `file:`, unknown schemes, HTTP images, and remote images when the setting is off are blocked. Opt-in remote images are HTTPS-only.
+Directory resources use a constrained opaque token and native canonical-path checks. Exact PDF/image resources use a cryptographically random token bound to `(bufferId, generation, canonicalPath, size, mediaType)`. Registration rejects non-regular files and non-allowlisted media types. Every request must match the active binding; save/rename/activation/replacement/close/shutdown revokes stale exact entries. Files are revalidated at open time, served with `Content-Length`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and allowlisted `Content-Type`. Single bounded byte ranges return `206`; invalid ranges return `416`.
+
+Relative image/link paths are rejected if absolute, scheme-bearing, traversal-containing, or outside the canonical document directory. Only HTTP/HTTPS links are offered to the system browser. `javascript:`, `file:`, unknown schemes, HTTP images, and remote images when the setting is off are blocked.
 
 ## Offline invariant
 
-The production renderer packages Markdown-it, DOMPurify, KaTeX, Highlight.js grammars, Mermaid Tiny, PlantUML, CSS, and fonts locally. The default renderer makes no network requests. If remote images are explicitly enabled, only HTTPS image requests are permitted; all other non-packaged requests remain blocked. PlantUML remote includes and arbitrary standard-library downloads are rejected.
+The production renderer packages all runtime dependencies, CSS, fonts, Mermaid Tiny, and PlantUML locally. The default renderer makes no network requests. PlantUML remote includes and arbitrary standard-library downloads are rejected. The selected PDF approach still requires manual WebView2 compatibility smoke testing before release sign-off.

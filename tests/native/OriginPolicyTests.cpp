@@ -2,6 +2,9 @@
 
 #include <iostream>
 
+bool RunProtocolTests();
+bool RunResourcePolicyTests();
+
 int main() {
   using mpp::IsAllowedAppMessageSource;
 
@@ -25,5 +28,7 @@ int main() {
     }
   }
 
+  if (!RunProtocolTests()) return 1;
+  if (!RunResourcePolicyTests()) return 1;
   return 0;
 }

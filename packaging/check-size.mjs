@@ -55,6 +55,10 @@ console.log(`Initial payload: ${sum(initial, "bytes")} bytes raw, ${initialGzip}
 console.log(`Lazy payload: ${sum(lazy, "bytes")} bytes raw, ${sum(lazy, "gzipBytes")} bytes gzip`);
 console.log(`Installed renderer assets: ${raw} bytes (${(raw / 1024 / 1024).toFixed(2)} MiB)`);
 console.log(`ZIP estimate (gzip sum + 64 KiB metadata): ${releaseZipEstimate} bytes (${(releaseZipEstimate / 1024 / 1024).toFixed(2)} MiB)`);
+const swagger = files.filter((file) => /swagger-ui/iu.test(file.name));
+if (swagger.length > 0) console.log(`OpenAPI Swagger UI lazy payload: ${sum(swagger, "bytes")} bytes raw, ${sum(swagger, "gzipBytes")} bytes gzip`);
+const pdf = files.filter((file) => /pdf(?:\.js|[-_])/iu.test(file.name));
+if (pdf.length > 0) console.log(`PDF viewer lazy payload: ${sum(pdf, "bytes")} bytes raw, ${sum(pdf, "gzipBytes")} bytes gzip`);
 if (archive) {
   if (!existsSync(resolve(process.cwd(), archive))) {
     console.error(`ZIP archive does not exist: ${archive}`);
@@ -66,7 +70,7 @@ if (archive) {
 }
 
 const warnings = [];
-if (initialGzip > 750 * 1024) warnings.push("initial payload exceeds the 750 KiB warning threshold");
+if (initialGzip > 250 * 1024) warnings.push("initial payload exceeds the Phase 2 250 KiB hard budget");
 if (raw > 20 * 1024 * 1024) warnings.push("installed renderer assets exceed the 20 MiB warning threshold");
 if (releaseZipEstimate > 8 * 1024 * 1024) warnings.push("estimated release archive exceeds the 8 MiB warning threshold");
 if (archive && statSync(resolve(process.cwd(), archive)).size > 8 * 1024 * 1024) warnings.push("release ZIP exceeds the 8 MiB warning threshold");

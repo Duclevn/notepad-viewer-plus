@@ -76,6 +76,37 @@ export function sanitizeGeneratedMath(html: string): string {
   return template.innerHTML;
 }
 
+export function sanitizeStandaloneSvg(svg: string): string {
+  const allowedTags = [...SVG_TAGS, "image"];
+  const allowedAttributes = [...SVG_ATTRIBUTES, "alt", "href", "xlink:href"];
+  const sanitized = DOMPurify.sanitize(svg, {
+    ALLOWED_TAGS: allowedTags,
+    ALLOWED_ATTR: allowedAttributes,
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: true,
+    FORBID_TAGS: ["script", "foreignObject", "iframe", "object", "embed"],
+    FORBID_ATTR: ["onload", "onclick", "onerror", "srcdoc"]
+  });
+  const parsed = new DOMParser().parseFromString(sanitized, "image/svg+xml");
+  if (parsed.querySelector("parsererror") || parsed.documentElement.localName !== "svg") return "";
+  const root = parsed.documentElement;
+  for (const style of root.querySelectorAll("style")) style.remove();
+  for (const element of [root, ...Array.from(root.querySelectorAll<SVGElement>("*"))]) {
+    for (const attribute of Array.from(element.attributes)) {
+      if (/^on/iu.test(attribute.name) || /(?:javascript|vbscript|file|https?):/iu.test(attribute.value) || /url\s*\(/iu.test(attribute.value)) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      if ((attribute.name === "href" || attribute.name === "xlink:href") &&
+          !(element.localName === "image" && /^data:image\/(?:png|gif|jpeg|webp);/iu.test(attribute.value))) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  }
+  normalizeSvgDimensions(root);
+  return new XMLSerializer().serializeToString(root);
+}
+
 export function sanitizeSvg(svg: string): string {
   const sanitized = DOMPurify.sanitize(svg, {
     ALLOWED_TAGS: SVG_TAGS,

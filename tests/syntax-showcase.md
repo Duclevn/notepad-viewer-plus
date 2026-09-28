@@ -1,5 +1,5 @@
 ---
-title: "Bộ kiểm thử cú pháp Markdown Preview Plus"
+title: "Bộ kiểm thử cú pháp Notepad Viewer Plus"
 subtitle: "Tài liệu mẫu độc lập cho giai đoạn 2"
 author: "Đội đọc tài liệu"
 language: vi
@@ -16,7 +16,7 @@ options:
     - yaml
 ---
 
-# Bộ kiểm thử cú pháp Markdown Preview Plus
+# Bộ kiểm thử cú pháp Notepad Viewer Plus
 
 Đây là tài liệu tiếng Việt dùng để kiểm tra toàn bộ khả năng hiện có của trình
 đọc. Nó được thiết kế để mở trực tiếp như **một file Markdown duy nhất** và
@@ -366,6 +366,6 @@ kết quả và hiển thị số lượng match. Nếu bạn đọc được đ
 math, Mermaid, PlantUML, ảnh từ xa và ngôn ngữ không xác định đều đã được cô
 lập; chúng không được chặn đoạn văn cuối cùng này.
 
-Đây là đoạn văn cuối để xác nhận failure locality: Markdown Preview Plus vẫn
+Đây là đoạn văn cuối để xác nhận failure locality: Notepad Viewer Plus vẫn
 render được nội dung bình thường sau mọi ví dụ lỗi, giữ an toàn cho HTML/link,
 và không cần kết nối mạng.

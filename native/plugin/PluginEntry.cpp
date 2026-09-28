@@ -104,18 +104,27 @@ void PluginEntry::Shutdown() {
 void PluginEntry::OnReady() {
   if (initialized_) return;
   initialized_ = true;
+  if (LegacyInstallationConflict()) {
+    MessageBoxW(nppData_._nppHandle,
+                L"Notepad Viewer Plus detected the legacy Markdown Preview Plus plugin. Remove the old plugin before enabling the renamed panel.",
+                kPluginName, MB_OK | MB_ICONWARNING);
+    return;
+  }
   const int toggleCommandId = functions_[CommandId::TogglePreview]._cmdID;
   if (toggleCommandId <= 0) {
-    OutputDebugStringW(L"Markdown Preview Plus: Notepad++ did not assign the toggle command ID; docking registration was skipped.\n");
+    OutputDebugStringW(L"Notepad Viewer Plus: Notepad++ did not assign the toggle command ID; docking registration was skipped.\n");
     return;
   }
   settingsOwner_ = std::make_unique<SettingsService>(nppData_._nppHandle);
   settingsService_ = settingsOwner_.get();
   settings_ = settingsService_->Load();
+  // Load() transparently reads the legacy INI when needed; immediately persist
+  // the normalized values under the new public identity.
+  settingsService_->Save(settings_);
 
   const std::wstring assets = PluginDirectory() + L"\\assets";
   const std::wstring localAppData = EnvironmentValue(L"LOCALAPPDATA");
-  const std::wstring webviewData = (localAppData.empty() ? L"." : localAppData) + L"\\MarkdownPreviewPlus\\WebView2";
+  const std::wstring webviewData = (localAppData.empty() ? L"." : localAppData) + L"\\NotepadViewerPlus\\WebView2";
   panel_ = std::make_shared<PreviewPanel>(nppData_._nppHandle, assets, webviewData);
   panel_->SetSettings(settings_);
   panel_->SetOpenExternalHandler([](const std::string& href) {
@@ -146,6 +155,17 @@ void PluginEntry::OnReady() {
     if (panel_) panel_->QueueDocumentUpdate(std::move(update));
   });
   coordinator_->SetDirectoryTokenHandler([this](const std::wstring& path) { return DirectoryTokenForPath(path); });
+  coordinator_->SetResourceActivationHandler([this](long long bufferId, unsigned long long generation) {
+    if (panel_) panel_->ActivateDocument(bufferId, generation);
+  });
+  coordinator_->SetResourceRevocationHandler([this] {
+    if (panel_) panel_->RevokeResources();
+  });
+  coordinator_->SetResourceRegistrationHandler([this](long long bufferId, unsigned long long generation,
+                                                       const std::wstring& path, const std::string& mediaType,
+                                                       std::size_t size) -> std::optional<PreviewResource> {
+    return panel_ ? panel_->RegisterExactFile(bufferId, generation, path, mediaType, size) : std::nullopt;
+  });
   coordinator_->SetTooLargeHandler([](std::size_t) {
     // Snapshot() sends a bounded, actionable status document instead of an empty update.
   });
@@ -156,7 +176,7 @@ void PluginEntry::OnReady() {
   docking.dlgID = toggleCommandId;
   docking.uMask = DWS_DF_CONT_RIGHT;
   docking.hIconTab = nullptr;
-  docking.pszModuleName = L"MarkdownPreviewPlus.dll";
+  docking.pszModuleName = L"NotepadViewerPlus.dll";
   SendMessage(nppData_._nppHandle, NPPM_DMMREGASDCKDLG, 0, reinterpret_cast<LPARAM>(&docking));
   if (showPanelOnReady_) {
     showPanelOnReady_ = false;
@@ -240,6 +260,15 @@ std::string PluginEntry::DirectoryTokenForPath(const std::wstring& path) {
   activeToken_ = TokenFor(directory);
   if (panel_) panel_->SetDocumentDirectory(activeToken_, directory);
   return activeToken_;
+}
+
+bool PluginEntry::LegacyInstallationConflict() {
+  if (GetModuleHandleW(L"MarkdownPreviewPlus.dll") != nullptr) return true;
+  const std::filesystem::path current = PluginDirectory();
+  const std::filesystem::path sameDirectory = current / L"MarkdownPreviewPlus.dll";
+  const std::filesystem::path siblingDirectory = current.parent_path() / L"MarkdownPreviewPlus" / L"MarkdownPreviewPlus.dll";
+  return GetFileAttributesW(sameDirectory.c_str()) != INVALID_FILE_ATTRIBUTES ||
+         GetFileAttributesW(siblingDirectory.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
 std::wstring PluginEntry::PluginDirectory() {

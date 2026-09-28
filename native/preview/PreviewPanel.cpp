@@ -8,7 +8,10 @@
 #include <wrl.h>
 
 #include <algorithm>
+#include <charconv>
 #include <filesystem>
+#include <limits>
+#include <string>
 #include <utility>
 
 using Microsoft::WRL::Callback;
@@ -17,7 +20,11 @@ using Microsoft::WRL::ComPtr;
 namespace mpp {
 namespace {
 
-constexpr wchar_t kWindowClass[] = L"MarkdownPreviewPlus.PreviewPanel";
+constexpr wchar_t kWindowClass[] = L"NotepadViewerPlus.PreviewPanel";
+
+bool IsAllowedFrameUri(const std::wstring& uri) {
+  return uri == L"https://app.local/diagram-frame.html" || uri == L"https://app.local/math-frame.html";
+}
 
 std::wstring UriToString(PWSTR value) {
   if (!value) return {};
@@ -26,12 +33,79 @@ std::wstring UriToString(PWSTR value) {
   return result;
 }
 
-void PutErrorResponse(ICoreWebView2Environment* environment, ICoreWebView2WebResourceRequestedEventArgs* args) {
+std::wstring HeaderToString(PWSTR value) {
+  return UriToString(value);
+}
+
+void PutErrorResponse(ICoreWebView2Environment* environment, ICoreWebView2WebResourceRequestedEventArgs* args,
+                      int status = 403, const wchar_t* reason = L"Blocked", const std::wstring& headers = L"Content-Type: text/plain\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n") {
   if (!environment || !args) return;
   ComPtr<ICoreWebView2WebResourceResponse> response;
-  if (SUCCEEDED(environment->CreateWebResourceResponse(nullptr, 403, L"Blocked", L"Content-Type: text/plain\r\n", &response))) {
+  if (SUCCEEDED(environment->CreateWebResourceResponse(nullptr, status, reason, headers.c_str(), &response))) {
     args->put_Response(response.Get());
   }
+}
+
+struct ByteRange {
+  bool requested{false};
+  bool valid{false};
+  std::size_t start{0};
+  std::size_t end{0};
+};
+
+bool ParseSize(std::string_view value, std::size_t& result) {
+  if (value.empty()) return false;
+  unsigned long long parsed = 0;
+  const char* begin = value.data();
+  const char* end = value.data() + value.size();
+  const auto [next, status] = std::from_chars(begin, end, parsed);
+  if (status != std::errc{} || next != end || parsed > std::numeric_limits<std::size_t>::max()) return false;
+  result = static_cast<std::size_t>(parsed);
+  return true;
+}
+
+ByteRange ReadRange(ICoreWebView2WebResourceRequest* request, std::size_t size) {
+  ByteRange range;
+  if (!request) return range;
+  ComPtr<ICoreWebView2HttpRequestHeaders> headers;
+  if (FAILED(request->get_Headers(&headers)) || !headers) return range;
+  PWSTR raw = nullptr;
+  if (FAILED(headers->GetHeader(L"Range", &raw)) || !raw) return range;
+  const std::wstring wide = HeaderToString(raw);
+  if (wide.empty()) return range;
+  std::string value;
+  value.reserve(wide.size());
+  for (const wchar_t character : wide) {
+    if (character > 0x7f) return ByteRange{true, false, 0, 0};
+    value.push_back(static_cast<char>(character));
+  }
+  range.requested = true;
+  if (size == 0 || value.rfind("bytes=", 0) != 0 || value.find(',') != std::string::npos) return range;
+  const std::string_view spec(value.data() + 6, value.size() - 6);
+  const std::size_t dash = spec.find('-');
+  if (dash == std::string_view::npos) return range;
+  const std::string_view first = spec.substr(0, dash);
+  const std::string_view last = spec.substr(dash + 1);
+  std::size_t start = 0;
+  std::size_t end = size - 1;
+  if (first.empty()) {
+    std::size_t suffix = 0;
+    if (!ParseSize(last, suffix) || suffix == 0) return range;
+    suffix = std::min(suffix, size);
+    start = size - suffix;
+  } else {
+    if (!ParseSize(first, start) || start >= size) return range;
+    if (!last.empty() && (!ParseSize(last, end) || end < start)) return range;
+    end = std::min(end, size - 1);
+  }
+  range.valid = true;
+  range.start = start;
+  range.end = end;
+  return range;
+}
+
+std::wstring MediaTypeHeader(const std::string& mediaType) {
+  return std::wstring(mediaType.begin(), mediaType.end());
 }
 
 }  // namespace
@@ -66,11 +140,15 @@ bool PreviewPanel::Create() {
 void PreviewPanel::Dispose() {
   if (state_ == PreviewState::Disposed) return;
   state_ = PreviewState::Disposed;
+  resourcePolicy_.RevokeAll();
   broker_->Detach();
   if (webview_ && resourceToken_.value != 0) webview_->remove_WebResourceRequested(resourceToken_);
   if (webview_ && navigationToken_.value != 0) webview_->remove_NavigationStarting(navigationToken_);
+  if (webview_ && frameNavigationToken_.value != 0) webview_->remove_FrameNavigationStarting(frameNavigationToken_);
   resourceToken_ = {};
   navigationToken_ = {};
+  frameNavigationToken_ = {};
+  allowedFrameNavigationId_.reset();
   if (controller_) controller_->Close();
   controller_.Reset();
   webview_.Reset();
@@ -100,6 +178,21 @@ void PreviewPanel::QueueDocumentUpdate(DocumentUpdate update) {
 
 bool PreviewPanel::SetDocumentDirectory(const std::string& token, const std::wstring& directory) {
   return resourcePolicy_.SetDocumentDirectory(token, directory);
+}
+
+std::optional<PreviewResource> PreviewPanel::RegisterExactFile(long long bufferId, unsigned long long generation,
+                                                                const std::wstring& path, const std::string& mediaType,
+                                                                std::size_t size) {
+  return resourcePolicy_.RegisterExactFile(bufferId, generation, path, mediaType, size);
+}
+
+void PreviewPanel::ActivateDocument(long long bufferId, unsigned long long generation) {
+  resourcePolicy_.ActivateDocument(bufferId, generation);
+}
+
+void PreviewPanel::RevokeResources() {
+  pendingUpdate_.reset();
+  resourcePolicy_.RevokeAll();
 }
 
 bool PreviewPanel::ResolveLocalResource(const std::string& token, const std::string& href, std::wstring& absolute) const {
@@ -154,7 +247,7 @@ void PreviewPanel::StartWebView() {
   std::filesystem::create_directories(userDataDirectory_, error);
   const std::wstring userDataPath = userDataDirectory_;
   const std::weak_ptr<PreviewPanel> weakSelf = weak_from_this();
-  HRESULT result = CreateCoreWebView2EnvironmentWithOptions(
+  const HRESULT result = CreateCoreWebView2EnvironmentWithOptions(
       nullptr, userDataPath.c_str(), nullptr,
       Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
           [weakSelf](HRESULT status, ICoreWebView2Environment* environment) {
@@ -196,13 +289,10 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
   }
   controller_->put_IsVisible(visible_ ? TRUE : FALSE);
   Resize();
-  // The diagram iframe is sandboxed without allow-same-origin, so its opaque origin needs
-  // CORS access to packaged app.local scripts. Document images use the separately intercepted
-  // doc.local path below; navigation and all other non-packaged requests remain blocked.
   ComPtr<ICoreWebView2_3> webview3;
   if (FAILED(webview_.As(&webview3)) || !webview3 ||
       FAILED(webview3->SetVirtualHostNameToFolderMapping(kAppHost, assetsDirectory_.c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW))) {
-    Fail(L"Preview assets could not be mapped into WebView2");
+    Fail(L"Preview assets could not be mapped to WebView2");
     return;
   }
   if (FAILED(webview_->AddWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL))) {
@@ -218,6 +308,17 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
           })
           .Get(),
       &navigationToken_);
+  if (FAILED(webview_->add_FrameNavigationStarting(
+          Callback<ICoreWebView2NavigationStartingEventHandler>(
+              [weakSelf](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) {
+                if (const auto self = weakSelf.lock()) self->OnFrameNavigationStarting(args);
+                return S_OK;
+              })
+              .Get(),
+          &frameNavigationToken_))) {
+    Fail(L"WebView2 frame navigation policy could not be installed");
+    return;
+  }
   webview_->add_WebResourceRequested(
       Callback<ICoreWebView2WebResourceRequestedEventHandler>(
           [weakSelf](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) {
@@ -239,6 +340,9 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
       [](unsigned long long) {},
       [weakSelf](unsigned long long, const std::string& message) {
         if (const auto self = weakSelf.lock(); self && self->rendererError_) self->rendererError_(message);
+      },
+      [weakSelf] {
+        if (const auto self = weakSelf.lock()) self->Fail(L"Preview protocol mismatch; reinstall the plugin assets");
       });
   broker_->Attach(webview_);
   state_ = PreviewState::LoadingApplication;
@@ -253,19 +357,57 @@ void PreviewPanel::OnRendererReady() {
 
 void PreviewPanel::OnNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args) {
   if (!args) return;
-  PWSTR uri = nullptr;
-  if (SUCCEEDED(args->get_Uri(&uri))) {
-    const std::wstring value = UriToString(uri);
-    if (value != kAppUrl) args->put_Cancel(TRUE);
-  } else {
+  UINT64 navigationId = 0;
+  if (FAILED(args->get_NavigationId(&navigationId))) {
     args->put_Cancel(TRUE);
+    return;
   }
+  if (allowedFrameNavigationId_ && *allowedFrameNavigationId_ == navigationId) {
+    allowedFrameNavigationId_.reset();
+    return;
+  }
+  allowedFrameNavigationId_.reset();
+  PWSTR uri = nullptr;
+  if (FAILED(args->get_Uri(&uri))) {
+    args->put_Cancel(TRUE);
+    return;
+  }
+  const std::wstring value = UriToString(uri);
+  // The top-level document may only be the packaged app. Exact PDF files are
+  // admitted only through the child-frame event below.
+  if (value != kAppUrl) args->put_Cancel(TRUE);
+}
+
+void PreviewPanel::OnFrameNavigationStarting(ICoreWebView2NavigationStartingEventArgs* args) {
+  if (!args) return;
+  UINT64 navigationId = 0;
+  PWSTR uri = nullptr;
+  if (FAILED(args->get_NavigationId(&navigationId)) || FAILED(args->get_Uri(&uri))) {
+    args->put_Cancel(TRUE);
+    return;
+  }
+  const std::wstring value = UriToString(uri);
+  if (IsAllowedFrameUri(value) || resourcePolicy_.IsExactFileUri(value)) {
+    allowedFrameNavigationId_ = navigationId;
+    return;
+  }
+  args->put_Cancel(TRUE);
 }
 
 void PreviewPanel::OnWebResourceRequested(ICoreWebView2WebResourceRequestedEventArgs* args) {
   if (!args) return;
   ComPtr<ICoreWebView2WebResourceRequest> request;
   if (FAILED(args->get_Request(&request)) || !request) return;
+  PWSTR method = nullptr;
+  if (FAILED(request->get_Method(&method)) || !method) {
+    PutErrorResponse(environment_.Get(), args, 405, L"Method Not Allowed");
+    return;
+  }
+  const std::wstring methodValue = UriToString(method);
+  if (methodValue != L"GET" && methodValue != L"HEAD") {
+    PutErrorResponse(environment_.Get(), args, 405, L"Method Not Allowed");
+    return;
+  }
   PWSTR uri = nullptr;
   if (FAILED(request->get_Uri(&uri))) {
     PutErrorResponse(environment_.Get(), args);
@@ -273,30 +415,61 @@ void PreviewPanel::OnWebResourceRequested(ICoreWebView2WebResourceRequestedEvent
   }
   const std::wstring value = UriToString(uri);
   if (value.rfind(L"https://app.local/", 0) == 0) return;
-  if (value.rfind(L"https://doc.local/resource/", 0) == 0) {
-    std::wstring path;
-    if (!resourcePolicy_.ResolveDocumentUri(value, path)) {
-      PutErrorResponse(environment_.Get(), args);
+
+  ResolvedResource resource;
+  if (resourcePolicy_.ResolveUri(value, resource)) {
+    if (resource.size > settings_.maximumResourceMegabytes * 1024u * 1024u) {
+      PutErrorResponse(environment_.Get(), args, 413, L"Payload Too Large");
       return;
     }
-    ComPtr<IStream> stream;
-    if (FAILED(SHCreateStreamOnFileEx(path.c_str(), STGM_READ | STGM_SHARE_DENY_NONE, FILE_ATTRIBUTE_NORMAL, FALSE, nullptr, &stream))) {
-      PutErrorResponse(environment_.Get(), args);
-      return;
-    }
-    ComPtr<ICoreWebView2WebResourceResponse> response;
-    if (SUCCEEDED(environment_->CreateWebResourceResponse(stream.Get(), 200, L"OK", L"Cache-Control: no-store\r\n", &response))) {
-      args->put_Response(response.Get());
-      return;
-    }
+    if (!CreateResourceResponse(args, resource)) PutErrorResponse(environment_.Get(), args);
+    return;
   }
+
   COREWEBVIEW2_WEB_RESOURCE_CONTEXT context{};
   if (SUCCEEDED(args->get_ResourceContext(&context)) &&
-      context == COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE &&
-      settings_.remoteImages && value.rfind(L"https://", 0) == 0) {
+      context == COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE && settings_.remoteImages && value.rfind(L"https://", 0) == 0) {
     return;
   }
   PutErrorResponse(environment_.Get(), args);
+}
+
+bool PreviewPanel::CreateResourceResponse(ICoreWebView2WebResourceRequestedEventArgs* args, const ResolvedResource& resource) {
+  if (!environment_ || !args || resource.absolutePath.empty()) return false;
+  ComPtr<ICoreWebView2WebResourceRequest> request;
+  if (FAILED(args->get_Request(&request)) || !request) return false;
+  const ByteRange range = ReadRange(request.Get(), resource.size);
+  if (range.requested && !range.valid) {
+    PutErrorResponse(environment_.Get(), args, 416, L"Range Not Satisfiable",
+                     L"Content-Range: bytes */" + std::to_wstring(resource.size) + L"\r\nCache-Control: no-store\r\n");
+    return true;
+  }
+
+  std::size_t start = range.valid ? range.start : 0;
+  const std::size_t end = range.valid ? range.end : (resource.size == 0 ? 0 : resource.size - 1);
+  const std::size_t contentLength = resource.size == 0 ? 0 : end - start + 1;
+  ComPtr<IStream> stream;
+  if (resource.size > 0 && FAILED(SHCreateStreamOnFileEx(resource.absolutePath.c_str(), STGM_READ | STGM_SHARE_DENY_NONE,
+                                                          FILE_ATTRIBUTE_NORMAL, FALSE, nullptr, &stream))) return false;
+  if (stream && start > 0) {
+    LARGE_INTEGER offset{};
+    offset.QuadPart = static_cast<LONGLONG>(start);
+    if (FAILED(stream->Seek(offset, STREAM_SEEK_SET, nullptr))) return false;
+  }
+
+  std::wstring headers = L"Content-Type: " + MediaTypeHeader(resource.mediaType) +
+                         L"\r\nContent-Length: " + std::to_wstring(contentLength) +
+                         L"\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nAccept-Ranges: bytes\r\n";
+  int status = 200;
+  const wchar_t* reason = L"OK";
+  if (range.valid) {
+    status = 206;
+    reason = L"Partial Content";
+    headers += L"Content-Range: bytes " + std::to_wstring(start) + L"-" + std::to_wstring(end) + L"/" + std::to_wstring(resource.size) + L"\r\n";
+  }
+  ComPtr<ICoreWebView2WebResourceResponse> response;
+  if (FAILED(environment_->CreateWebResourceResponse(stream.Get(), status, reason, headers.c_str(), &response))) return false;
+  return SUCCEEDED(args->put_Response(response.Get()));
 }
 
 void PreviewPanel::Fail(const wchar_t* reason) {
@@ -329,9 +502,6 @@ void PreviewPanel::ShowFailureStatus(const wchar_t* reason) {
 
 void PreviewPanel::SendPendingUpdate() {
   if (state_ != PreviewState::Ready || !pendingUpdate_) return;
-  if (pendingUpdate_->documentDirectoryToken.empty()) {
-    // An unsaved document has no filesystem directory; local resources remain blocked.
-  }
   if (broker_->PostDocumentUpdate(*pendingUpdate_)) pendingUpdate_.reset();
 }
 
