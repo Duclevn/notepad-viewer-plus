@@ -1,0 +1,21 @@
+# Renderer dependencies and build output
+renderer/node_modules/
+renderer/dist/
+renderer/.vite/
+
+# Native build output
+build/
+out/
+*.obj
+*.pdb
+*.ilk
+*.suo
+
+# Local validation logs
+*.log
+.tmp/
+
+# IDE files
+.vscode/
+.vs/
+.idea/

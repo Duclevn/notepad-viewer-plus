@@ -1,0 +1,270 @@
+#include "PluginEntry.h"
+
+#include <Notepad_plus_msgs.h>
+#include <windows.h>
+#include <shellapi.h>
+
+#include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <sstream>
+#include <utility>
+#include <vector>
+
+namespace mpp {
+namespace {
+
+PluginEntry g_instance;
+
+std::wstring Utf8ToWide(const std::string& value) {
+  if (value.empty()) return {};
+  const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
+  if (size <= 0) return {};
+  std::wstring result(static_cast<std::size_t>(size), L'\0');
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), result.data(), size) <= 0) return {};
+  return result;
+}
+
+std::wstring EnvironmentValue(const wchar_t* name) {
+  std::vector<wchar_t> value(1024);
+  for (int attempt = 0; attempt < 6; ++attempt) {
+    const DWORD length = GetEnvironmentVariableW(name, value.data(), static_cast<DWORD>(value.size()));
+    if (length == 0) return {};
+    if (length < value.size() - 1) return std::wstring(value.data(), length);
+    value.resize(value.size() * 2);
+  }
+  return {};
+}
+
+std::string TokenFor(const std::wstring& value) {
+  // FNV-1a gives a stable opaque token without exposing the document path to JavaScript.
+  std::uint64_t hash = 1469598103934665603ull;
+  for (wchar_t character : value) {
+    hash ^= static_cast<std::uint64_t>(character);
+    hash *= 1099511628211ull;
+  }
+  std::ostringstream stream;
+  stream << "dir-" << std::hex << hash;
+  return stream.str();
+}
+
+}  // namespace
+
+PluginEntry& Instance() { return g_instance; }
+
+void PluginEntry::SetNppData(NppData data) {
+  nppData_ = data;
+  auto setFunc = [this](CommandId id, const wchar_t* name, PFUNCPLUGINCMD func, ShortcutKey* shortcut = nullptr) {
+    lstrcpyW(functions_[id]._itemName, name);
+    functions_[id]._pFunc = func;
+    functions_[id]._cmdID = 0;
+    functions_[id]._init2Check = false;
+    functions_[id]._pShKey = shortcut;
+  };
+  setFunc(CommandId::TogglePreview, L"Toggle Preview", &TogglePreviewCommand, &togglePreviewShortcut_);
+  setFunc(CommandId::RefreshPreview, L"Refresh Preview", &RefreshPreviewCommand);
+  setFunc(CommandId::ToggleAutoRefresh, L"Toggle Auto-refresh", &ToggleAutoRefreshCommand);
+  setFunc(CommandId::ToggleTableOfContents, L"Toggle Table of Contents", &ToggleTableOfContentsCommand);
+  setFunc(CommandId::ThemeLight, L"Theme: Light", &ThemeLightCommand);
+  setFunc(CommandId::ThemeDark, L"Theme: Dark", &ThemeDarkCommand);
+  setFunc(CommandId::ThemeSystem, L"Theme: System", &ThemeSystemCommand);
+  setFunc(CommandId::OpenSettings, L"Open Settings", &SettingsCommand);
+}
+
+void PluginEntry::OnNotification(SCNotification* notification) {
+  if (!notification) return;
+  if (notification->nmhdr.code == NPPN_READY) {
+    OnReady();
+    return;
+  }
+  if (notification->nmhdr.code == NPPN_SHUTDOWN) {
+    Shutdown();
+    return;
+  }
+  if (coordinator_) coordinator_->OnNotification(notification);
+}
+
+LRESULT PluginEntry::MessageProc(UINT, WPARAM, LPARAM) { return 1; }
+
+FuncItem* PluginEntry::Functions(int* count) {
+  if (count) *count = CommandCount;
+  return functions_;
+}
+
+void PluginEntry::Shutdown() {
+  if (coordinator_) coordinator_->Stop();
+  panel_.reset();
+  coordinator_.reset();
+  settingsOwner_.reset();
+  settingsService_ = nullptr;
+  showPanelOnReady_ = false;
+  initialized_ = false;
+}
+
+void PluginEntry::OnReady() {
+  if (initialized_) return;
+  initialized_ = true;
+  const int toggleCommandId = functions_[CommandId::TogglePreview]._cmdID;
+  if (toggleCommandId <= 0) {
+    OutputDebugStringW(L"Markdown Preview Plus: Notepad++ did not assign the toggle command ID; docking registration was skipped.\n");
+    return;
+  }
+  settingsOwner_ = std::make_unique<SettingsService>(nppData_._nppHandle);
+  settingsService_ = settingsOwner_.get();
+  settings_ = settingsService_->Load();
+
+  const std::wstring assets = PluginDirectory() + L"\\assets";
+  const std::wstring localAppData = EnvironmentValue(L"LOCALAPPDATA");
+  const std::wstring webviewData = (localAppData.empty() ? L"." : localAppData) + L"\\MarkdownPreviewPlus\\WebView2";
+  panel_ = std::make_shared<PreviewPanel>(nppData_._nppHandle, assets, webviewData);
+  panel_->SetSettings(settings_);
+  panel_->SetOpenExternalHandler([](const std::string& href) {
+    const std::wstring wide = Utf8ToWide(href);
+    if (!wide.empty()) ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+  });
+  panel_->SetOpenLocalHandler([this](const std::string& href, const std::string& token) {
+    std::wstring absolute;
+    if (!panel_ || !panel_->ResolveLocalResource(token, href, absolute)) return;
+    ShellExecuteW(nullptr, L"open", absolute.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+  });
+  panel_->SetRendererErrorHandler([](const std::string&) {
+    // PreviewPanel displays initialization failures in its non-modal status child;
+    // renderer errors remain non-modal to avoid blocking Notepad++.
+  });
+  panel_->SetVisibilityChangedHandler([this](bool visible) {
+    if (functions_[CommandId::TogglePreview]._cmdID > 0) {
+      SendMessage(nppData_._nppHandle, NPPM_SETMENUITEMCHECK,
+                  static_cast<WPARAM>(functions_[CommandId::TogglePreview]._cmdID), visible ? TRUE : FALSE);
+    }
+    if (visible && coordinator_) coordinator_->RefreshNow();
+  });
+  panel_->Create();
+
+  coordinator_ = std::make_unique<DocumentCoordinator>(nppData_._nppHandle, nppData_._scintillaMainHandle, nppData_._scintillaSecondHandle);
+  coordinator_->SetSettings(settings_);
+  coordinator_->SetUpdateHandler([this](DocumentUpdate update) {
+    if (panel_) panel_->QueueDocumentUpdate(std::move(update));
+  });
+  coordinator_->SetDirectoryTokenHandler([this](const std::wstring& path) { return DirectoryTokenForPath(path); });
+  coordinator_->SetTooLargeHandler([](std::size_t) {
+    // Snapshot() sends a bounded, actionable status document instead of an empty update.
+  });
+
+  tTbData docking{};
+  docking.hClient = panel_->Window();
+  docking.pszName = kPluginName;
+  docking.dlgID = toggleCommandId;
+  docking.uMask = DWS_DF_CONT_RIGHT;
+  docking.hIconTab = nullptr;
+  docking.pszModuleName = L"MarkdownPreviewPlus.dll";
+  SendMessage(nppData_._nppHandle, NPPM_DMMREGASDCKDLG, 0, reinterpret_cast<LPARAM>(&docking));
+  if (showPanelOnReady_) {
+    showPanelOnReady_ = false;
+    SendMessage(nppData_._nppHandle, NPPM_DMMSHOW, 0, reinterpret_cast<LPARAM>(panel_->Window()));
+  } else {
+    SendMessage(nppData_._nppHandle, NPPM_DMMHIDE, 0, reinterpret_cast<LPARAM>(panel_->Window()));
+  }
+  UpdateMenuChecks();
+}
+
+void PluginEntry::TogglePreview() {
+  if (!panel_) {
+    // Notepad++ invokes the registered docking command before NPPN_READY when
+    // config.xml says this panel was visible at the previous clean shutdown.
+    showPanelOnReady_ = !showPanelOnReady_;
+    return;
+  }
+  const bool show = !panel_->IsVisible();
+  SendMessage(nppData_._nppHandle, show ? NPPM_DMMSHOW : NPPM_DMMHIDE,
+              0, reinterpret_cast<LPARAM>(panel_->Window()));
+}
+
+void PluginEntry::RefreshPreview() {
+  if (coordinator_) coordinator_->RefreshNow();
+}
+
+void PluginEntry::ToggleAutoRefresh() {
+  settings_.autoRefresh = !settings_.autoRefresh;
+  if (settingsService_) settingsService_->Save(settings_);
+  if (coordinator_) coordinator_->SetSettings(settings_);
+  if (panel_) panel_->SetSettings(settings_);
+  UpdateMenuChecks();
+}
+
+void PluginEntry::ToggleTableOfContents() {
+  settings_.showTableOfContents = !settings_.showTableOfContents;
+  if (settingsService_) settingsService_->Save(settings_);
+  if (coordinator_) coordinator_->SetSettings(settings_);
+  if (panel_) panel_->SetSettings(settings_);
+  UpdateMenuChecks();
+  RefreshPreview();
+}
+
+void PluginEntry::SetTheme(const char* theme) {
+  settings_.theme = theme;
+  if (settingsService_) settingsService_->Save(settings_);
+  if (coordinator_) coordinator_->SetSettings(settings_);
+  if (panel_) panel_->SetSettings(settings_);
+  UpdateMenuChecks();
+  RefreshPreview();
+}
+
+void PluginEntry::UpdateMenuChecks() {
+  if (!nppData_._nppHandle) return;
+  const auto setChecked = [this](CommandId id, bool checked) {
+    const int commandId = functions_[id]._cmdID;
+    if (commandId > 0) {
+      SendMessage(nppData_._nppHandle, NPPM_SETMENUITEMCHECK,
+                  static_cast<WPARAM>(commandId), checked ? TRUE : FALSE);
+    }
+  };
+  setChecked(CommandId::TogglePreview, panel_ && panel_->IsVisible());
+  setChecked(CommandId::ToggleAutoRefresh, settings_.autoRefresh);
+  setChecked(CommandId::ToggleTableOfContents, settings_.showTableOfContents);
+  setChecked(CommandId::ThemeLight, settings_.theme == "light");
+  setChecked(CommandId::ThemeDark, settings_.theme == "dark");
+  setChecked(CommandId::ThemeSystem, settings_.theme != "light" && settings_.theme != "dark");
+}
+
+std::string PluginEntry::DirectoryTokenForPath(const std::wstring& path) {
+  if (path.empty()) {
+    activeToken_.clear();
+    return {};
+  }
+  const std::filesystem::path file(path);
+  const std::wstring directory = file.parent_path().wstring();
+  if (directory.empty()) {
+    activeToken_.clear();
+    return {};
+  }
+  activeToken_ = TokenFor(directory);
+  if (panel_) panel_->SetDocumentDirectory(activeToken_, directory);
+  return activeToken_;
+}
+
+std::wstring PluginEntry::PluginDirectory() {
+  HMODULE module = nullptr;
+  GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                     reinterpret_cast<LPCWSTR>(&PluginDirectory), &module);
+  std::vector<wchar_t> path(1024);
+  for (int attempt = 0; attempt < 6; ++attempt) {
+    const DWORD size = GetModuleFileNameW(module, path.data(), static_cast<DWORD>(path.size()));
+    if (size == 0) return L".";
+    if (size < path.size() - 1) return std::filesystem::path(std::wstring(path.data(), size)).parent_path().wstring();
+    path.resize(path.size() * 2);
+  }
+  return L".";
+}
+
+void PluginEntry::TogglePreviewCommand() { Instance().TogglePreview(); }
+void PluginEntry::RefreshPreviewCommand() { Instance().RefreshPreview(); }
+void PluginEntry::ToggleAutoRefreshCommand() { Instance().ToggleAutoRefresh(); }
+void PluginEntry::ToggleTableOfContentsCommand() { Instance().ToggleTableOfContents(); }
+void PluginEntry::ThemeLightCommand() { Instance().SetTheme("light"); }
+void PluginEntry::ThemeDarkCommand() { Instance().SetTheme("dark"); }
+void PluginEntry::ThemeSystemCommand() { Instance().SetTheme("system"); }
+void PluginEntry::SettingsCommand() {
+  ShellExecuteW(nullptr, L"open", L"https://npp-user-manual.org/docs/plugins/", nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+}  // namespace mpp
