@@ -13,7 +13,7 @@ const required = ["zip", "arch", "version", "repository", "author", "homepage"];
 const missing = required.filter((key) => !values.get(key));
 if (missing.length > 0) {
   console.error(`Missing options: ${missing.map((key) => `--${key}=...`).join(", ")}`);
-  console.error("Example: node generate-entry.mjs --zip=release/NotepadViewerPlus-0.2.1-x64.zip --arch=x64 --version=0.2.1 --repository=https://github.com/example/releases/download/v0.2.1/NotepadViewerPlus-0.2.1-x64.zip");
+  console.error("Example: node generate-entry.mjs --zip=release/NotepadViewerPlus-0.2.2-x64.zip --arch=x64 --version=0.2.2 --repository=https://github.com/example/releases/download/v0.2.2/NotepadViewerPlus-0.2.2-x64.zip");
   process.exit(2);
 }
 

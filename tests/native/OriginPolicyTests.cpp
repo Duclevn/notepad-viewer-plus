@@ -2,6 +2,7 @@
 
 #include <iostream>
 
+bool RunNotepadMessageTests();
 bool RunProtocolTests();
 bool RunResourcePolicyTests();
 
@@ -30,5 +31,6 @@ int main() {
 
   if (!RunProtocolTests()) return 1;
   if (!RunResourcePolicyTests()) return 1;
+  if (!RunNotepadMessageTests()) return 1;
   return 0;
 }

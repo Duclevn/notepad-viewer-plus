@@ -22,6 +22,7 @@ Notepad Viewer Plus is a Windows Notepad++ plugin with an offline, docked multi-
 - WebView2 navigation and unexpected network requests are blocked; only explicitly permitted external links leave through the system browser, and the optional HTTPS-image mode is passed through the native policy.
 - All diagram render operations are serialized across generations, and Mermaid/PlantUML output is sanitized before display.
 - Do not perform parsing or rendering in Notepad++ notification callbacks.
+- Respect each Notepad++ message's documented return contract: `RUNCOMMAND_USER` string copy calls return `BOOL`, while sized messages such as `NPPM_GETPLUGINSCONFIGDIR` return a character count only for the null-buffer sizing call and `BOOL` for the copy call. Never interpret a successful copy result as the string length.
 - Keep a newly installed preview hidden. Honor Notepad++ dock-state restoration, refresh immediately whenever the panel becomes visible, and let `NPPM_DMMSHOW`/`NPPM_DMMHIDE` own docked-window visibility so the closed state persists.
 - Do not add the GPL PlantUML site/demo build, unpinned runtime dependencies, or a network-backed OpenAPI/PDF service.
 

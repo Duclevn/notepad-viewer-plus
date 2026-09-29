@@ -89,14 +89,16 @@ std::wstring SettingsService::LegacyFlatConfigPath() const {
 }
 
 std::wstring SettingsService::PluginConfigDirectory() const {
-  std::vector<wchar_t> buffer(1024);
-  for (int attempt = 0; attempt < 6; ++attempt) {
-    const LRESULT length = SendMessageW(notepadWindow_, NPPM_GETPLUGINSCONFIGDIR,
-                                        static_cast<WPARAM>(buffer.size()), reinterpret_cast<LPARAM>(buffer.data()));
-    if (length > 0 && static_cast<std::size_t>(length) < buffer.size() - 1) {
-      return std::wstring(buffer.data(), static_cast<std::size_t>(length)) + L"\\NotepadViewerPlus";
+  // NPPM_GETPLUGINSCONFIGDIR returns the required character count only when
+  // queried with a null output buffer; the subsequent copy call returns BOOL.
+  const LRESULT required = SendMessageW(notepadWindow_, NPPM_GETPLUGINSCONFIGDIR, 0, 0);
+  if (required > 0 && required < 32768) {
+    std::vector<wchar_t> buffer(static_cast<std::size_t>(required) + 1u, L'\0');
+    if (SendMessageW(notepadWindow_, NPPM_GETPLUGINSCONFIGDIR,
+                     static_cast<WPARAM>(buffer.size()), reinterpret_cast<LPARAM>(buffer.data())) != FALSE) {
+      const auto terminator = std::find(buffer.cbegin(), buffer.cend(), L'\0');
+      if (terminator != buffer.cend()) return std::wstring(buffer.cbegin(), terminator) + L"\\NotepadViewerPlus";
     }
-    buffer.resize(buffer.size() * 2);
   }
 
   std::vector<wchar_t> localAppData(1024);

@@ -45,7 +45,7 @@ cpack --config build/CPackConfig.cmake -C Release
 
 This produces an architecture-specific ZIP with `NotepadViewerPlus.dll` at the archive root, which is the layout required by Notepad++ Plugin Admin. See [`packaging/plugin-admin/README.md`](packaging/plugin-admin/README.md) for manual installation and Plugin Admin metadata.
 
-For a local install, close Notepad++, then right-click `Install-NotepadViewerPlus-0.2.1.ps1` in the project root and choose **Run with PowerShell**. The installer finds the latest generated ZIP, requests administrator permission when needed, validates the payload, and keeps the previous plugin directory as a rollback backup. For a portable/custom installation, run it with `-NotepadRoot "C:\path\to\Notepad++"` or `-TargetDir "C:\path\to\plugins\NotepadViewerPlus"`.
+For a local install, close Notepad++, then right-click `Install-NotepadViewerPlus-0.2.2.ps1` in the project root and choose **Run with PowerShell**. The installer finds the latest generated ZIP, requests administrator permission when needed, validates the payload, and keeps the previous plugin directory as a rollback backup. For a portable/custom installation, run it with `-NotepadRoot "C:\path\to\Notepad++"` or `-TargetDir "C:\path\to\plugins\NotepadViewerPlus"`.
 
 Build Win32 separately for 32-bit Notepad++. The current Windows development environment can build and test the x64 native plugin with the SDKs under `third_party/`.
 

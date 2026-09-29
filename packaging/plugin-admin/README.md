@@ -5,7 +5,7 @@
 Notepad Viewer Plus packages are architecture-specific ZIP files. The ZIP must contain the plugin DLL directly at its root, with the same basename as the plugin folder, plus the `assets/` directory:
 
 ```text
-NotepadViewerPlus-0.2.1-x64.zip
+NotepadViewerPlus-0.2.2-x64.zip
 ├── NotepadViewerPlus.dll
 ├── THIRD-PARTY-LICENSES.txt
 └── assets/
@@ -27,7 +27,7 @@ The resulting `NotepadViewerPlus-<version>-x64.zip` or `...-x86.zip` can be manu
 
 Restart Notepad++ after extraction. The x86 ZIP must be used with 32-bit Notepad++; the x64 ZIP must be used with 64-bit Notepad++.
 
-For the local x64 build, close Notepad++ and run the project-root `Install-NotepadViewerPlus-0.2.1.ps1` with PowerShell. The script discovers the standard Notepad++ installation, elevates when required, validates the ZIP, and keeps a rollback backup. Use `-NotepadRoot` or `-TargetDir` for a portable/custom installation.
+For the local x64 build, close Notepad++ and run the project-root `Install-NotepadViewerPlus-0.2.2.ps1` with PowerShell. The script discovers the standard Notepad++ installation, elevates when required, validates the ZIP, and keeps a rollback backup. Use `-NotepadRoot` or `-TargetDir` for a portable/custom installation.
 
 ## Official Plugin Admin
 
@@ -37,9 +37,9 @@ Generate an entry for an exact uploaded ZIP with:
 
 ```text
 node packaging/plugin-admin/generate-entry.mjs ^
-  --zip=release/NotepadViewerPlus-0.2.1-x64.zip ^
-  --arch=x64 --version=0.2.1 ^
-  --repository=https://github.com/<owner>/<repo>/releases/download/v0.2.1/NotepadViewerPlus-0.2.1-x64.zip ^
+  --zip=release/NotepadViewerPlus-0.2.2-x64.zip ^
+  --arch=x64 --version=0.2.2 ^
+  --repository=https://github.com/<owner>/<repo>/releases/download/v0.2.2/NotepadViewerPlus-0.2.2-x64.zip ^
   --author="Your name" --homepage=https://github.com/<owner>/<repo>
 ```
 

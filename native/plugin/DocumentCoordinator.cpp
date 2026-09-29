@@ -224,13 +224,17 @@ std::string DocumentCoordinator::ReadUtf8(HWND editor) const {
 }
 
 std::wstring DocumentCoordinator::CurrentPath() const {
-  std::vector<wchar_t> path(1024);
+  // Unlike newer sized-string NPP messages, RUNCOMMAND_USER string messages
+  // return BOOL on the copy call, not the copied character count.
+  std::vector<wchar_t> path(1024, L'\0');
   for (int attempt = 0; attempt < 6; ++attempt) {
-    const LRESULT length = SendMessageW(notepadWindow_, NPPM_GETFULLCURRENTPATH,
-                                        static_cast<WPARAM>(path.size()), reinterpret_cast<LPARAM>(path.data()));
-    if (length <= 0) return {};
-    if (static_cast<std::size_t>(length) < path.size() - 1) return std::wstring(path.data(), static_cast<std::size_t>(length));
-    path.resize(path.size() * 2);
+    const LRESULT succeeded = SendMessageW(notepadWindow_, NPPM_GETFULLCURRENTPATH,
+                                           static_cast<WPARAM>(path.size()), reinterpret_cast<LPARAM>(path.data()));
+    if (succeeded != FALSE) {
+      const auto terminator = std::find(path.cbegin(), path.cend(), L'\0');
+      return terminator == path.cend() ? std::wstring{} : std::wstring(path.cbegin(), terminator);
+    }
+    path.assign(path.size() * 2, L'\0');
   }
   return {};
 }
