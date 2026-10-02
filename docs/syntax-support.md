@@ -20,13 +20,19 @@ Notepad Viewer Plus renders supported content locally inside the docked WebView2
 
 A manual format override is carried by protocol v2 settings and applies until the active buffer is closed. Unknown or invalid overrides fall back safely. JSON/YAML OpenAPI detection occurs after bounded parsing.
 
+## Theme behavior
+
+Light, dark, and system themes apply to viewer-owned UI. System mode is resolved against the current Windows color preference and is refreshed when that preference changes. Markdown, plain text, structured-data trees, and CSV/TSV grids use native application colors; Mermaid, PlantUML, KaTeX, and code highlighting receive an effective light/dark theme.
+
+Authored or third-party formats are not color-inverted. Swagger UI uses a light compatibility surface in dark mode, sanitized HTML always uses an explicit light document canvas, and PDF pages retain the rendering chosen by the WebView2 PDF viewer. Standalone SVG and raster-image viewers provide Light, Dark, and Grid background controls; SVG defaults to Light and raster images default to Grid so transparent content remains inspectable.
+
 ## Markdown
 
 Common Markdown is parsed by Markdown-it. YAML front matter is recognized only at the start of the document, with an optional UTF-8 BOM. It uses a non-constructing YAML schema and is shown as bounded metadata. Raw HTML is enabled by default but passed through an allowlist sanitizer; the setting can disable raw HTML.
 
 Relative images and links use an opaque native directory token and are served only after canonical-path validation inside the current document directory. Remote images are disabled by default; the opt-in mode permits HTTPS images only.
 
-**Plugins → Notepad Viewer Plus → Toggle Table of Contents** shows or hides a generated, collapsible heading list. It is off by default and bounded to the first 500 headings.
+Markdown headings receive safe anchor IDs and a bounded table of contents (maximum 500 headings). The top-right list button opens the TOC in a right-side panel and toggles it without re-rendering the document. **Plugins → Notepad Viewer Plus → Toggle Table of Contents** controls the initial panel state for the active document. The renderer does not inject a second in-document TOC; any visible heading/list TOC in the document is authored Markdown content.
 
 ## Diagrams and math
 
@@ -45,7 +51,7 @@ CSV/TSV parsing supports RFC 4180-style quoted fields, escaped quotes, quoted ne
 
 HTML is sanitized before being placed in an iframe with an empty sandbox and a restrictive frame CSP. Scripts, forms, popups, downloads, top navigation, external subresources, and author CSS are not supported.
 
-Standalone SVG is never inserted as active SVG in the application DOM. Scripts, event attributes, `foreignObject`, external references, CSS URLs, and unsafe image references are removed; the result is displayed through a Blob-backed image and revoked on replacement.
+Standalone SVG is never inserted as active SVG in the application DOM. Scripts, event attributes, `foreignObject`, external references, CSS URLs, and unsafe image references are removed; the result is displayed through a Blob-backed image and revoked on replacement. Its background selector changes only the viewer artboard and never rewrites SVG colors.
 
 OpenAPI/Swagger is documentation-only through a pinned, locally bundled lazy Swagger UI chunk. `Try it out`, authorization, validators, remote config/definition URLs, OAuth redirects, and outgoing requests are disabled. Every `$ref` must be a same-document fragment; remote and cross-file references are rejected before rendering. A safe local summary fallback is used if the lazy chunk cannot load.
 

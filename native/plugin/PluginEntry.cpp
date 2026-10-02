@@ -1,6 +1,8 @@
 #include "PluginEntry.h"
+#include "../resources/ResourceIds.h"
+#include "Version.h"
 
-#include <Notepad_plus_msgs.h>
+#include <commctrl.h>
 #include <windows.h>
 #include <shellapi.h>
 
@@ -48,31 +50,40 @@ std::string TokenFor(const std::wstring& value) {
   return stream.str();
 }
 
+HRESULT CALLBACK AboutDialogCallback(HWND, UINT notification, WPARAM, LPARAM data, LONG_PTR) {
+  if (notification != TDN_HYPERLINK_CLICKED || data == 0) return S_OK;
+  const auto* target = reinterpret_cast<const wchar_t*>(data);
+  if (wcscmp(target, L"https://ducle.uk") == 0) {
+    ShellExecuteW(nullptr, L"open", target, nullptr, nullptr, SW_SHOWNORMAL);
+  }
+  return S_OK;
+}
+
 }  // namespace
 
 PluginEntry& Instance() { return g_instance; }
 
 void PluginEntry::SetNppData(NppData data) {
   nppData_ = data;
-  auto setFunc = [this](CommandId id, const wchar_t* name, PFUNCPLUGINCMD func, ShortcutKey* shortcut = nullptr) {
-    lstrcpyW(functions_[id]._itemName, name);
-    functions_[id]._pFunc = func;
-    functions_[id]._cmdID = 0;
-    functions_[id]._init2Check = false;
-    functions_[id]._pShKey = shortcut;
+  const PluginCommandCallbacks callbacks{
+      &TogglePreviewCommand,
+      &RefreshPreviewCommand,
+      &ToggleAutoRefreshCommand,
+      &ToggleTableOfContentsCommand,
+      &ThemeLightCommand,
+      &ThemeDarkCommand,
+      &ThemeSystemCommand,
+      &AboutCommand,
   };
-  setFunc(CommandId::TogglePreview, L"Toggle Preview", &TogglePreviewCommand, &togglePreviewShortcut_);
-  setFunc(CommandId::RefreshPreview, L"Refresh Preview", &RefreshPreviewCommand);
-  setFunc(CommandId::ToggleAutoRefresh, L"Toggle Auto-refresh", &ToggleAutoRefreshCommand);
-  setFunc(CommandId::ToggleTableOfContents, L"Toggle Table of Contents", &ToggleTableOfContentsCommand);
-  setFunc(CommandId::ThemeLight, L"Theme: Light", &ThemeLightCommand);
-  setFunc(CommandId::ThemeDark, L"Theme: Dark", &ThemeDarkCommand);
-  setFunc(CommandId::ThemeSystem, L"Theme: System", &ThemeSystemCommand);
-  setFunc(CommandId::OpenSettings, L"Open Settings", &SettingsCommand);
+  PopulatePluginCommands(functions_, &togglePreviewShortcut_, callbacks);
 }
 
 void PluginEntry::OnNotification(SCNotification* notification) {
   if (!notification) return;
+  if (notification->nmhdr.code == NPPN_TBMODIFICATION) {
+    RegisterToolbarIcon();
+    return;
+  }
   if (notification->nmhdr.code == NPPN_READY) {
     OnReady();
     return;
@@ -97,8 +108,81 @@ void PluginEntry::Shutdown() {
   coordinator_.reset();
   settingsOwner_.reset();
   settingsService_ = nullptr;
+  if (toolbarIcons_.hToolbarBmp) {
+    DeleteObject(toolbarIcons_.hToolbarBmp);
+  }
+  toolbarIcons_ = {};
   showPanelOnReady_ = false;
+  toolbarRegistered_ = false;
   initialized_ = false;
+}
+
+void PluginEntry::RegisterToolbarIcon() {
+  if (toolbarRegistered_ || !nppData_._nppHandle) return;
+  const int commandId = functions_[CommandId::TogglePreview]._cmdID;
+  if (commandId <= 0) return;
+
+  HMODULE module = nullptr;
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCWSTR>(&PluginEntry::PluginDirectory), &module)) {
+    return;
+  }
+
+  toolbarIcons_.hToolbarIcon = LoadIconW(module, MAKEINTRESOURCEW(IDI_TOGGLE_PREVIEW_LIGHT));
+  toolbarIcons_.hToolbarIconDarkMode = LoadIconW(module, MAKEINTRESOURCEW(IDI_TOGGLE_PREVIEW_DARK));
+  toolbarIcons_.hToolbarBmp = LoadBitmapW(module, MAKEINTRESOURCEW(IDB_TOGGLE_PREVIEW_LEGACY));
+  if (!toolbarIcons_.hToolbarIcon || !toolbarIcons_.hToolbarIconDarkMode || !toolbarIcons_.hToolbarBmp) {
+    if (toolbarIcons_.hToolbarBmp) DeleteObject(toolbarIcons_.hToolbarBmp);
+    toolbarIcons_ = {};
+    OutputDebugStringW(L"Notepad Viewer Plus: toolbar resources could not be loaded.\n");
+    return;
+  }
+
+  toolbarRegistered_ = SendMessageW(nppData_._nppHandle, NPPM_ADDTOOLBARICON_FORDARKMODE,
+                                    static_cast<WPARAM>(commandId),
+                                    reinterpret_cast<LPARAM>(&toolbarIcons_)) == TRUE;
+  if (!toolbarRegistered_) {
+    DeleteObject(toolbarIcons_.hToolbarBmp);
+    toolbarIcons_ = {};
+    OutputDebugStringW(L"Notepad Viewer Plus: Notepad++ rejected toolbar registration.\n");
+  }
+}
+
+void PluginEntry::ShowAbout() {
+  const wchar_t content[] =
+      L"Offline, docked preview with live refresh, themes, table of contents, and security-focused handling "
+      L"of untrusted content.\n\n"
+      L"Supported files:\n"
+      L"\u2022 Markdown \u2014 embedded Mermaid, PlantUML, syntax-highlighted code blocks, math, and admonitions\n"
+      L"\u2022 Mermaid and PlantUML \u2014 standalone diagram files\n"
+      L"\u2022 HTML and SVG\n"
+      L"\u2022 JSON, YAML, and XML\n"
+      L"\u2022 CSV and TSV\n"
+      L"\u2022 OpenAPI and Swagger\n"
+      L"\u2022 Images \u2014 PNG, JPEG, GIF, WebP, BMP, and ICO\n"
+      L"\u2022 PDF\n\n"
+      L"Created by Duc Le \u2014 <a href=\"https://ducle.uk\">ducle.uk</a>";
+  TASKDIALOGCONFIG config{};
+  config.cbSize = sizeof(config);
+  config.hwndParent = nppData_._nppHandle;
+  config.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_POSITION_RELATIVE_TO_WINDOW | TDF_SIZE_TO_CONTENT;
+  config.dwCommonButtons = TDCBF_OK_BUTTON;
+  config.pszWindowTitle = L"About Notepad Viewer Plus";
+  config.pszMainInstruction = L"Notepad Viewer Plus " NVP_RELEASE_VERSION_WIDE;
+  config.pszContent = content;
+  config.pfCallback = &AboutDialogCallback;
+
+  if (FAILED(TaskDialogIndirect(&config, nullptr, nullptr, nullptr))) {
+    MessageBoxW(
+        nppData_._nppHandle,
+        L"Notepad Viewer Plus " NVP_RELEASE_VERSION_WIDE L"\n\n"
+        L"Supported files:\n"
+        L"\u2022 Markdown \u2014 embedded Mermaid, PlantUML, syntax-highlighted code blocks, math, and admonitions\n"
+        L"\u2022 Mermaid and PlantUML diagram files\n"
+        L"\u2022 HTML, SVG, JSON, YAML, XML, CSV, TSV, OpenAPI, Swagger, images, and PDF\n\n"
+        L"Created by Duc Le \u2014 https://ducle.uk",
+        L"About Notepad Viewer Plus", MB_OK | MB_ICONINFORMATION);
+  }
 }
 
 void PluginEntry::OnReady() {
@@ -292,8 +376,6 @@ void PluginEntry::ToggleTableOfContentsCommand() { Instance().ToggleTableOfConte
 void PluginEntry::ThemeLightCommand() { Instance().SetTheme("light"); }
 void PluginEntry::ThemeDarkCommand() { Instance().SetTheme("dark"); }
 void PluginEntry::ThemeSystemCommand() { Instance().SetTheme("system"); }
-void PluginEntry::SettingsCommand() {
-  ShellExecuteW(nullptr, L"open", L"https://npp-user-manual.org/docs/plugins/", nullptr, nullptr, SW_SHOWNORMAL);
-}
+void PluginEntry::AboutCommand() { Instance().ShowAbout(); }
 
 }  // namespace mpp

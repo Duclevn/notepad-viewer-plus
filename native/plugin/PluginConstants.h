@@ -23,7 +23,7 @@ enum CommandId : int {
   ThemeLight,
   ThemeDark,
   ThemeSystem,
-  OpenSettings,
+  About,
   CommandCount
 };
 

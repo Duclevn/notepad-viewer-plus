@@ -41,34 +41,24 @@ describe("MarkdownPipeline", () => {
     expect(result.html).toContain('<th scope="row">title</th>');
     expect(result.html).toContain("mpp-front-matter-collection");
     expect(result.html).toContain("Example &lt;script&gt;");
-    expect(result.html).toContain("<h1>Heading</h1>");
+    expect(result.html).toContain('<h1 id="heading">Heading</h1>');
     expect(result.html).not.toContain("<h2>title</h2>");
     expect(result.html).not.toContain("<pre>");
   });
 
-  it("renders an optional table of contents with safe unique heading links", async () => {
-    const withToc = update("# Overview\n\n## Install *now*\n\n## Install now\n\n### 日本語\n\n#### !!!\n\n#### ???\n\n##### Conflict\n\n##### Conflict 2\n\n##### Conflict");
-    withToc.settings = { ...withToc.settings, showTableOfContents: true };
-    const result = await new MarkdownPipeline().render(withToc);
+  it("collects bounded TOC entries and safe unique heading IDs independently of visibility", async () => {
+    const source = "# Overview\n\n## Install *now*\n\n## Install now\n\n### 日本語\n\n#### !!!\n\n#### ???\n\n##### Conflict\n\n##### Conflict 2\n\n##### Conflict";
+    const result = await new MarkdownPipeline().render(update(source));
 
-    expect(result.html).toContain('aria-label="Table of contents"');
-    expect(result.html).toContain('<a href="#overview">Overview</a>');
-    expect(result.html).toContain('<a href="#install-now">Install now</a>');
-    expect(result.html).toContain('<a href="#install-now-2">Install now</a>');
-    expect(result.html).toContain('<a href="#日本語">日本語</a>');
-    expect(result.html).toContain('<a href="#section">!!!</a>');
-    expect(result.html).toContain('<a href="#section-2">???</a>');
-    expect(result.html).toContain('<a href="#conflict-3">Conflict</a>');
+    expect(result.toc.map((heading) => heading.id)).toEqual([
+      "overview", "install-now", "install-now-2", "日本語", "section", "section-2", "conflict", "conflict-2", "conflict-3"
+    ]);
     expect(result.html).toContain('<h2 id="install-now-2">Install now</h2>');
     expect(result.html).toContain('<h5 id="conflict-3">Conflict</h5>');
 
-    const withoutToc = await new MarkdownPipeline().render(update("# Overview"));
-    expect(withoutToc.html).not.toContain('aria-label="Table of contents"');
-
     const manyHeadings = update(Array.from({ length: 501 }, (_, index) => `# Heading ${index + 1}`).join("\n\n"));
-    manyHeadings.settings = { ...manyHeadings.settings, showTableOfContents: true };
     const bounded = await new MarkdownPipeline().render(manyHeadings);
-    expect(bounded.html.match(/class="mpp-toc-level-/gu)).toHaveLength(500);
+    expect(bounded.toc).toHaveLength(500);
     expect(bounded.html).toContain('<h1 id="heading-501">Heading 501</h1>');
   });
 
@@ -85,7 +75,7 @@ describe("MarkdownPipeline", () => {
     const result = await new MarkdownPipeline().render(update("---\nvalue: [broken\n---\n# Still rendered"));
 
     expect(result.html).toContain("Front matter could not be parsed");
-    expect(result.html).toContain("<h1>Still rendered</h1>");
+    expect(result.html).toContain('<h1 id="still-rendered">Still rendered</h1>');
   });
 
   it("preserves GitHub table alignment and renders task-list checkboxes", async () => {

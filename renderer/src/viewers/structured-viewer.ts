@@ -1,3 +1,4 @@
+import { highlightCodeBlocks } from "../markdown/code";
 import { sanitizeHtml } from "../security/sanitize";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
@@ -8,11 +9,15 @@ interface ParseResult {
   error?: string;
 }
 
-interface RenderState {
-  nodes: number;
+interface RenderLimits {
   maxNodes: number;
   maxDepth: number;
   maxString: number;
+}
+
+interface RenderState extends RenderLimits {
+  nodes: number;
+  truncated: boolean;
 }
 
 const MAX_DEFAULT_NODES = 20_000;
@@ -21,6 +26,7 @@ const MAX_DEFAULT_STRING = 64 * 1024;
 
 export class StructuredDataViewer implements ViewerAdapter {
   public readonly id = "json" as const;
+  public readonly themeBehavior = "native" as const;
 
   public canRender(context: ViewerContext): boolean {
     return context.update.source.kind === "text" &&
@@ -65,11 +71,11 @@ export class StructuredDataViewer implements ViewerAdapter {
         return { warnings: ["The local Swagger UI chunk could not be loaded; a safe documentation fallback was shown."] };
       }
     }
-    renderTree(context.root, parsed.value, {
+    renderStructuredViewer(context.root, parsed.value, source, format, {
       maxNodes: MAX_DEFAULT_NODES,
       maxDepth: MAX_DEFAULT_DEPTH,
       maxString: MAX_DEFAULT_STRING
-    });
+    }, context.isCurrent);
     return {};
   }
 
@@ -143,55 +149,468 @@ function trimString(value: string): string {
   return value.length > MAX_DEFAULT_STRING ? `${value.slice(0, MAX_DEFAULT_STRING)}…` : value;
 }
 
-function renderTree(root: HTMLElement, value: StructuredValue, limits: Omit<RenderState, "nodes">): void {
+function renderStructuredViewer(
+  root: HTMLElement,
+  value: StructuredValue,
+  rawSource: string,
+  format: "json" | "yaml" | "xml",
+  limits: RenderLimits,
+  isCurrent: () => boolean
+): void {
   root.replaceChildren();
   const container = document.createElement("section");
   container.className = "mpp-structured-viewer";
-  container.setAttribute("aria-label", "Structured data tree");
-  const state: RenderState = { ...limits, nodes: 0 };
-  container.appendChild(renderValue(value, "$", 0, state));
-  if (state.nodes >= state.maxNodes) container.appendChild(limitWarning("The tree was truncated at the configured node limit."));
+  container.setAttribute("aria-label", "Structured data viewer");
+
+  const state: RenderState = { ...limits, nodes: 0, truncated: false };
+
+  const formatLabel = format.toUpperCase();
+  let statsLabel = "";
+  if (value && typeof value === "object") {
+    if (Array.isArray(value)) {
+      statsLabel = `${value.length} ${value.length === 1 ? "item" : "items"}`;
+    } else {
+      const keys = Object.keys(value).length;
+      statsLabel = `${keys} ${keys === 1 ? "property" : "properties"}`;
+    }
+  } else {
+    statsLabel = typeof value;
+  }
+
+  // Toolbar
+  const toolbar = document.createElement("div");
+  toolbar.className = "mpp-structured-toolbar";
+
+  // Tab switcher
+  const tabs = document.createElement("div");
+  tabs.className = "mpp-view-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "View mode");
+
+  const treeTab = document.createElement("button");
+  treeTab.type = "button";
+  treeTab.className = "mpp-view-tab mpp-tab-active";
+  treeTab.dataset.mppView = "tree";
+  treeTab.setAttribute("role", "tab");
+  treeTab.setAttribute("aria-selected", "true");
+  treeTab.textContent = "Tree";
+
+  const codeTab = document.createElement("button");
+  codeTab.type = "button";
+  codeTab.className = "mpp-view-tab";
+  codeTab.dataset.mppView = "code";
+  codeTab.setAttribute("role", "tab");
+  codeTab.setAttribute("aria-selected", "false");
+  codeTab.textContent = "Code";
+
+  tabs.append(treeTab, codeTab);
+
+  // Tree controls
+  const treeControls = document.createElement("div");
+  treeControls.className = "mpp-tree-controls";
+
+  const expandAllBtn = document.createElement("button");
+  expandAllBtn.type = "button";
+  expandAllBtn.className = "mpp-toolbar-btn mpp-expand-all";
+  expandAllBtn.title = "Expand all nodes";
+  expandAllBtn.textContent = "Expand all";
+
+  const collapseAllBtn = document.createElement("button");
+  collapseAllBtn.type = "button";
+  collapseAllBtn.className = "mpp-toolbar-btn mpp-collapse-all";
+  collapseAllBtn.title = "Collapse all nodes";
+  collapseAllBtn.textContent = "Collapse all";
+
+  const searchInput = document.createElement("input");
+  searchInput.type = "search";
+  searchInput.className = "mpp-tree-search";
+  searchInput.placeholder = "Filter keys or values…";
+  searchInput.setAttribute("aria-label", "Filter structured tree");
+
+  treeControls.append(expandAllBtn, collapseAllBtn, searchInput);
+
+  // Toolbar end: metadata + copy all
+  const toolbarEnd = document.createElement("div");
+  toolbarEnd.className = "mpp-toolbar-end";
+
+  const metaSpan = document.createElement("span");
+  metaSpan.className = "mpp-tree-meta";
+  metaSpan.textContent = `${formatLabel} • ${statsLabel}`;
+
+  const formattedText = format === "json" ? JSON.stringify(value, null, 2) : rawSource;
+
+  const copyAllBtn = document.createElement("button");
+  copyAllBtn.type = "button";
+  copyAllBtn.className = "mpp-toolbar-btn mpp-copy-raw";
+  copyAllBtn.textContent = "Copy";
+  copyAllBtn.title = `Copy formatted ${formatLabel}`;
+  copyAllBtn.dataset.mppCopyValue = formattedText;
+
+  toolbarEnd.append(metaSpan, copyAllBtn);
+  toolbar.append(tabs, treeControls, toolbarEnd);
+
+  // Tree pane
+  const treePane = document.createElement("div");
+  treePane.className = "mpp-structured-tree-pane";
+
+  const treeContent = renderStructuredNode(null, value, "$", 0, state);
+  treePane.appendChild(treeContent);
+
+  if (state.truncated) {
+    treePane.appendChild(limitWarning("The tree was truncated at the configured node limit."));
+  }
+
+  // Code pane
+  const codePane = document.createElement("div");
+  codePane.className = "mpp-structured-code-pane";
+  codePane.hidden = true;
+
+  const codeBlock = document.createElement("div");
+  codeBlock.className = "mpp-code-block";
+  codeBlock.dataset.mppCode = "code-structured";
+  codeBlock.dataset.mppLanguage = format;
+
+  const codeToolbar = document.createElement("div");
+  codeToolbar.className = "mpp-code-toolbar";
+  const codeLang = document.createElement("span");
+  codeLang.className = "mpp-code-language";
+  codeLang.textContent = formatLabel;
+  const copyCodeBtn = document.createElement("button");
+  copyCodeBtn.type = "button";
+  copyCodeBtn.className = "mpp-copy-code";
+  copyCodeBtn.dataset.copyCode = "code-structured";
+  copyCodeBtn.textContent = "Copy";
+  codeToolbar.append(codeLang, copyCodeBtn);
+
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.className = `language-${format}`;
+  code.textContent = formattedText;
+  pre.appendChild(code);
+  codeBlock.append(codeToolbar, pre);
+  codePane.appendChild(codeBlock);
+
+  // Event handlers
+  let codeHighlighted = false;
+  const switchView = async (mode: "tree" | "code") => {
+    if (mode === "tree") {
+      treeTab.classList.add("mpp-tab-active");
+      treeTab.setAttribute("aria-selected", "true");
+      codeTab.classList.remove("mpp-tab-active");
+      codeTab.setAttribute("aria-selected", "false");
+      treePane.hidden = false;
+      codePane.hidden = true;
+      treeControls.hidden = false;
+    } else {
+      codeTab.classList.add("mpp-tab-active");
+      codeTab.setAttribute("aria-selected", "true");
+      treeTab.classList.remove("mpp-tab-active");
+      treeTab.setAttribute("aria-selected", "false");
+      treePane.hidden = true;
+      codePane.hidden = false;
+      treeControls.hidden = true;
+      if (!codeHighlighted) {
+        codeHighlighted = true;
+        try {
+          await highlightCodeBlocks(codePane, isCurrent);
+        } catch {
+          // Fallback to unhighlighted code block if highlighting fails
+        }
+      }
+    }
+  };
+
+  treeTab.addEventListener("click", () => void switchView("tree"));
+  codeTab.addEventListener("click", () => void switchView("code"));
+
+  expandAllBtn.addEventListener("click", () => {
+    treePane.querySelectorAll<HTMLDetailsElement>("details.mpp-tree-node").forEach((d) => (d.open = true));
+  });
+
+  collapseAllBtn.addEventListener("click", () => {
+    treePane.querySelectorAll<HTMLDetailsElement>("details.mpp-tree-node").forEach((d) => (d.open = false));
+    const rootDetails = treePane.querySelector<HTMLDetailsElement>("details.mpp-tree-node");
+    if (rootDetails) rootDetails.open = true;
+  });
+
+  searchInput.addEventListener("input", () => {
+    const query = searchInput.value.trim().toLowerCase();
+    const allItems = treePane.querySelectorAll<HTMLElement>(".mpp-tree-node, .mpp-tree-leaf");
+    if (!query) {
+      container.classList.remove("mpp-filtering");
+      allItems.forEach((item) => item.classList.remove("mpp-match", "mpp-dim"));
+      return;
+    }
+    container.classList.add("mpp-filtering");
+    allItems.forEach((item) => {
+      const text = item.dataset.mppSearchText?.toLowerCase() ?? "";
+      const matches = text.includes(query);
+      if (matches) {
+        item.classList.add("mpp-match");
+        item.classList.remove("mpp-dim");
+        let parent = item.parentElement?.closest<HTMLDetailsElement>("details.mpp-tree-node");
+        while (parent) {
+          parent.open = true;
+          parent.classList.remove("mpp-dim");
+          parent = parent.parentElement?.closest<HTMLDetailsElement>("details.mpp-tree-node");
+        }
+      } else {
+        item.classList.remove("mpp-match");
+        item.classList.add("mpp-dim");
+      }
+    });
+  });
+
+  container.append(toolbar, treePane, codePane);
   root.appendChild(container);
 }
 
-function renderValue(value: StructuredValue, path: string, depth: number, state: RenderState): HTMLElement {
-  if (++state.nodes > state.maxNodes || depth > state.maxDepth) return limitWarning("… rendering limit reached");
-  if (value !== null && typeof value === "object") {
+function renderStructuredNode(
+  key: string | null,
+  value: StructuredValue,
+  path: string,
+  depth: number,
+  state: RenderState
+): HTMLElement {
+  if (++state.nodes > state.maxNodes || depth > state.maxDepth) {
+    state.truncated = true;
+    return limitWarning("… rendering limit reached");
+  }
+
+  // Object
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const details = document.createElement("details");
     details.className = "mpp-tree-node";
     details.open = depth < 2;
+
+    const entries = Object.entries(value);
+    const count = entries.length;
+    const badgeText = `${count} ${count === 1 ? "prop" : "props"}`;
+    const keysPreview = previewObjectKeys(entries);
+    details.dataset.mppSearchText = `${key ?? ""} ${entries.map(([k]) => k).join(" ")}`;
+
     const summary = document.createElement("summary");
-    summary.append(pathLabel(path, value));
-    summary.appendChild(copyButton(path, value));
+    summary.className = "mpp-tree-summary";
+
+    const line = document.createElement("span");
+    line.className = "mpp-tree-line";
+
+    const arrow = document.createElement("span");
+    arrow.className = "mpp-tree-arrow";
+    line.appendChild(arrow);
+
+    if (key !== null) {
+      const keySpan = document.createElement("span");
+      keySpan.className = "mpp-tree-key";
+      keySpan.textContent = key;
+      const colonSpan = document.createElement("span");
+      colonSpan.className = "mpp-tree-colon";
+      colonSpan.textContent = ": ";
+      line.append(keySpan, colonSpan);
+    }
+
+    const openBracket = document.createElement("span");
+    openBracket.className = "mpp-tree-bracket";
+    openBracket.textContent = "{";
+    line.appendChild(openBracket);
+
+    const badge = document.createElement("span");
+    badge.className = "mpp-tree-collapsed-badge";
+    badge.textContent = badgeText;
+    line.appendChild(badge);
+
+    if (keysPreview) {
+      const previewSpan = document.createElement("span");
+      previewSpan.className = "mpp-tree-preview";
+      previewSpan.textContent = keysPreview;
+      line.appendChild(previewSpan);
+    }
+
+    const closeSummaryBracket = document.createElement("span");
+    closeSummaryBracket.className = "mpp-tree-bracket mpp-tree-closing-bracket";
+    closeSummaryBracket.textContent = "}";
+    line.appendChild(closeSummaryBracket);
+
+    line.appendChild(createRowActions(path, value));
+    summary.appendChild(line);
     details.appendChild(summary);
-    const entries = Array.isArray(value) ? value.map((item, index) => [String(index), item] as const) : Object.entries(value);
-    for (const [key, item] of entries) {
-      const childPath = Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`;
-      details.appendChild(renderValue(item, childPath, depth + 1, state));
+
+    const childrenContainer = document.createElement("div");
+    childrenContainer.className = "mpp-tree-children";
+
+    for (const [childKey, childValue] of entries) {
+      const childPath = formatChildPath(path, childKey, false);
+      childrenContainer.appendChild(renderStructuredNode(childKey, childValue, childPath, depth + 1, state));
       if (state.nodes >= state.maxNodes) break;
     }
+
+    details.appendChild(childrenContainer);
+
+    const closeLine = document.createElement("div");
+    closeLine.className = "mpp-tree-close-line";
+    const closingBracket = document.createElement("span");
+    closingBracket.className = "mpp-tree-bracket";
+    closingBracket.textContent = "}";
+    closeLine.appendChild(closingBracket);
+    details.appendChild(closeLine);
+
     return details;
   }
-  const row = document.createElement("div");
-  row.className = "mpp-tree-value";
-  row.append(pathLabel(path, value), copyButton(path, value));
-  return row;
+
+  // Array
+  if (Array.isArray(value)) {
+    const details = document.createElement("details");
+    details.className = "mpp-tree-node";
+    details.open = depth < 2;
+
+    const count = value.length;
+    const badgeText = `${count} ${count === 1 ? "item" : "items"}`;
+    details.dataset.mppSearchText = `${key ?? ""}`;
+
+    const summary = document.createElement("summary");
+    summary.className = "mpp-tree-summary";
+
+    const line = document.createElement("span");
+    line.className = "mpp-tree-line";
+
+    const arrow = document.createElement("span");
+    arrow.className = "mpp-tree-arrow";
+    line.appendChild(arrow);
+
+    if (key !== null) {
+      const keySpan = document.createElement("span");
+      keySpan.className = isNumeric(key) ? "mpp-tree-index" : "mpp-tree-key";
+      keySpan.textContent = isNumeric(key) ? `[${key}]` : key;
+      const colonSpan = document.createElement("span");
+      colonSpan.className = "mpp-tree-colon";
+      colonSpan.textContent = ": ";
+      line.append(keySpan, colonSpan);
+    }
+
+    const openBracket = document.createElement("span");
+    openBracket.className = "mpp-tree-bracket";
+    openBracket.textContent = "[";
+    line.appendChild(openBracket);
+
+    const badge = document.createElement("span");
+    badge.className = "mpp-tree-collapsed-badge";
+    badge.textContent = badgeText;
+    line.appendChild(badge);
+
+    const closeSummaryBracket = document.createElement("span");
+    closeSummaryBracket.className = "mpp-tree-bracket mpp-tree-closing-bracket";
+    closeSummaryBracket.textContent = "]";
+    line.appendChild(closeSummaryBracket);
+
+    line.appendChild(createRowActions(path, value));
+    summary.appendChild(line);
+    details.appendChild(summary);
+
+    const childrenContainer = document.createElement("div");
+    childrenContainer.className = "mpp-tree-children";
+
+    for (let index = 0; index < value.length; ++index) {
+      const childPath = formatChildPath(path, String(index), true);
+      childrenContainer.appendChild(renderStructuredNode(String(index), value[index]!, childPath, depth + 1, state));
+      if (state.nodes >= state.maxNodes) break;
+    }
+
+    details.appendChild(childrenContainer);
+
+    const closeLine = document.createElement("div");
+    closeLine.className = "mpp-tree-close-line";
+    const closingBracket = document.createElement("span");
+    closingBracket.className = "mpp-tree-bracket";
+    closingBracket.textContent = "]";
+    closeLine.appendChild(closingBracket);
+    details.appendChild(closeLine);
+
+    return details;
+  }
+
+  // Primitive
+  const leaf = document.createElement("div");
+  leaf.className = "mpp-tree-leaf";
+  leaf.dataset.mppSearchText = `${key ?? ""} ${value === null ? "null" : String(value)}`;
+
+  const line = document.createElement("span");
+  line.className = "mpp-tree-line";
+
+  const bullet = document.createElement("span");
+  bullet.className = "mpp-tree-bullet";
+  line.appendChild(bullet);
+
+  if (key !== null) {
+    const keySpan = document.createElement("span");
+    keySpan.className = isNumeric(key) ? "mpp-tree-index" : "mpp-tree-key";
+    keySpan.textContent = isNumeric(key) ? `[${key}]` : key;
+    const colonSpan = document.createElement("span");
+    colonSpan.className = "mpp-tree-colon";
+    colonSpan.textContent = ": ";
+    line.append(keySpan, colonSpan);
+  }
+
+  const valueSpan = document.createElement("span");
+  if (typeof value === "string") {
+    valueSpan.className = "mpp-tree-string";
+    valueSpan.textContent = `"${value}"`;
+  } else if (typeof value === "number") {
+    valueSpan.className = "mpp-tree-number";
+    valueSpan.textContent = String(value);
+  } else if (typeof value === "boolean") {
+    valueSpan.className = "mpp-tree-boolean";
+    valueSpan.textContent = String(value);
+  } else {
+    valueSpan.className = "mpp-tree-null";
+    valueSpan.textContent = "null";
+  }
+  line.appendChild(valueSpan);
+
+  line.appendChild(createRowActions(path, value));
+  leaf.appendChild(line);
+  return leaf;
 }
 
-function pathLabel(path: string, value: StructuredValue): Text {
-  const label = typeof value === "string" ? value : value === null ? "null" : String(value);
-  return document.createTextNode(`${path}: ${label}`);
+function previewObjectKeys(entries: [string, StructuredValue][]): string {
+  if (entries.length === 0) return "";
+  const maxKeys = 4;
+  const keys = entries.slice(0, maxKeys).map(([k]) => k);
+  if (entries.length > maxKeys) keys.push("…");
+  return `{ ${keys.join(", ")} }`;
 }
 
-function copyButton(path: string, value: StructuredValue): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "mpp-copy-value";
-  button.textContent = "Copy";
-  button.setAttribute("aria-label", `Copy ${path}`);
-  button.dataset.mppCopyPath = path;
-  button.dataset.mppCopyValue = value === null || typeof value !== "object" ? String(value) : JSON.stringify(value);
-  return button;
+function isNumeric(value: string): boolean {
+  return /^[0-9]+$/u.test(value);
+}
+
+function formatChildPath(parentPath: string, key: string, isArray: boolean): string {
+  if (isArray) return `${parentPath}[${key}]`;
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(key)) return `${parentPath}.${key}`;
+  return `${parentPath}[${JSON.stringify(key)}]`;
+}
+
+function createRowActions(path: string, value: StructuredValue): HTMLElement {
+  const actions = document.createElement("span");
+  actions.className = "mpp-tree-actions";
+
+  const copyVal = document.createElement("button");
+  copyVal.type = "button";
+  copyVal.className = "mpp-tree-copy-btn";
+  copyVal.textContent = "Copy";
+  copyVal.title = "Copy value";
+  copyVal.setAttribute("aria-label", `Copy value at ${path}`);
+  copyVal.dataset.mppCopyValue = value === null || typeof value !== "object" ? String(value) : JSON.stringify(value, null, 2);
+
+  const copyPath = document.createElement("button");
+  copyPath.type = "button";
+  copyPath.className = "mpp-tree-copy-btn";
+  copyPath.textContent = "Path";
+  copyPath.title = "Copy JSONPath";
+  copyPath.setAttribute("aria-label", `Copy path ${path}`);
+  copyPath.dataset.mppCopyValue = path;
+
+  actions.append(copyVal, copyPath);
+  return actions;
 }
 
 function limitWarning(message: string): HTMLElement {

@@ -6,6 +6,7 @@ const FRAME_CSP = "default-src 'none'; img-src https://doc.local data:; style-sr
 
 export class HtmlViewer implements ViewerAdapter {
   public readonly id = "html" as const;
+  public readonly themeBehavior = "light-canvas" as const;
 
   public canRender(context: ViewerContext): boolean {
     return context.update.source.kind === "text" &&
@@ -35,7 +36,7 @@ export class HtmlViewer implements ViewerAdapter {
     frame.title = context.update.file.name;
     frame.setAttribute("sandbox", "");
     frame.referrerPolicy = "no-referrer";
-    frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}"><body>${template.innerHTML}</body>`;
+    frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}"><meta name="color-scheme" content="light"><body bgcolor="#ffffff" text="#1f2328">${template.innerHTML}</body>`;
     context.root.appendChild(frame);
     return {};
   }

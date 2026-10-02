@@ -1,0 +1,21 @@
+[CmdletBinding()]
+param(
+    [string]$ZipPath,
+    [string]$TargetDir,
+    [string]$NotepadRoot
+)
+
+$installer = Join-Path $PSScriptRoot 'packaging\install-plugin.ps1'
+if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+    throw "Installer template not found: $installer"
+}
+
+if (-not $PSBoundParameters.ContainsKey('ZipPath')) {
+    $ZipPath = Join-Path $PSScriptRoot 'NotepadViewerPlus-@VERSION@-x64.zip'
+}
+$arguments = @{ ZipPath = $ZipPath }
+if ($PSBoundParameters.ContainsKey('TargetDir')) { $arguments.TargetDir = $TargetDir }
+if ($PSBoundParameters.ContainsKey('NotepadRoot')) { $arguments.NotepadRoot = $NotepadRoot }
+
+& $installer @arguments
+exit $LASTEXITCODE

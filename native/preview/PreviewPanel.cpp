@@ -1,5 +1,6 @@
 #include "PreviewPanel.h"
 
+#include "../bridge/OriginPolicy.h"
 #include "../plugin/PluginConstants.h"
 
 #include <WebView2.h>
@@ -21,10 +22,6 @@ namespace mpp {
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"NotepadViewerPlus.PreviewPanel";
-
-bool IsAllowedFrameUri(const std::wstring& uri) {
-  return uri == L"https://app.local/diagram-frame.html" || uri == L"https://app.local/math-frame.html";
-}
 
 std::wstring UriToString(PWSTR value) {
   if (!value) return {};
@@ -375,6 +372,8 @@ void PreviewPanel::OnNavigationStarting(ICoreWebView2NavigationStartingEventArgs
     args->put_Cancel(TRUE);
     return;
   }
+  // Retain allowedFrameNavigationId_ check for WebView2 runtime versions where
+  // child-frame navigations also dispatch to the top-level NavigationStarting event.
   if (allowedFrameNavigationId_ && *allowedFrameNavigationId_ == navigationId) {
     allowedFrameNavigationId_.reset();
     return;

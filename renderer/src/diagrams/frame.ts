@@ -1,3 +1,5 @@
+import { renderPlantUmlToString, type PlantUmlApi } from "./plantuml-render";
+
 export {};
 
 interface FrameRequest {
@@ -5,16 +7,12 @@ interface FrameRequest {
   id: string;
   engine: "mermaid" | "plantuml";
   source: string;
-  theme: "light" | "dark" | "system";
+  theme: "light" | "dark";
 }
 
 interface MermaidApi {
   initialize(options: Record<string, unknown>): void;
   render(id: string, source: string): Promise<{ svg: string }>;
-}
-
-interface PlantUmlApi {
-  renderToString(lines: string[], onSuccess: (svg: string) => void, onError: (message: unknown) => void): void;
 }
 
 declare global {
@@ -42,7 +40,7 @@ function isFrameRequest(value: unknown): value is FrameRequest {
     typeof request.id === "string" && request.id.length <= 128 &&
     (request.engine === "mermaid" || request.engine === "plantuml") &&
     typeof request.source === "string" && request.source.length <= 200_000 &&
-    (request.theme === "light" || request.theme === "dark" || request.theme === "system")
+    (request.theme === "light" || request.theme === "dark")
   );
 }
 
@@ -51,9 +49,7 @@ async function render(request: FrameRequest): Promise<string> {
   if (request.engine === "plantuml") {
     if (/^\s*!include[^\r\n]*$/imu.test(request.source)) throw new Error("PlantUML includes are disabled in offline preview");
     const plantUml = await loadPlantUml();
-    svg = await new Promise<string>((resolve, reject) => {
-      plantUml.renderToString(request.source.split(/\r?\n/u), resolve, (message) => reject(new Error(String(message))));
-    });
+    svg = await renderPlantUmlToString(plantUml, request.source, request.id, request.theme === "dark");
   } else {
     const mermaid = await loadMermaid();
     mermaid.initialize({
@@ -125,7 +121,7 @@ function loadPlantUml(): Promise<PlantUmlApi> {
     plantUmlPromise = (async () => {
       await import("@plantuml/core/viz-global.js");
       const module = await import("@plantuml/core/plantuml.js");
-      if (typeof module.renderToString !== "function") throw new Error("PlantUML runtime has no renderToString API");
+      if (typeof module.render !== "function") throw new Error("PlantUML runtime has no render API");
       return module as unknown as PlantUmlApi;
     })();
   }

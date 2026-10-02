@@ -1,0 +1,3 @@
+#pragma once
+
+#define NVP_RELEASE_VERSION_WIDE L"@NVP_VERSION@"

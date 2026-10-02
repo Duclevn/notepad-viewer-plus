@@ -1,0 +1,39 @@
+#include <windows.h>
+#include "@NVP_RESOURCE_IDS@"
+
+IDI_TOGGLE_PREVIEW_LIGHT ICON "@NVP_RESOURCE_DIR_NATIVE@/toolbar-light.ico"
+IDI_TOGGLE_PREVIEW_DARK ICON "@NVP_RESOURCE_DIR_NATIVE@/toolbar-dark.ico"
+IDB_TOGGLE_PREVIEW_LEGACY BITMAP "@NVP_RESOURCE_DIR_NATIVE@/toolbar-legacy.bmp"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @NVP_VERSION_COMMA@
+ PRODUCTVERSION @NVP_VERSION_COMMA@
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE 0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Duc Le\0"
+      VALUE "FileDescription", "Notepad Viewer Plus Notepad++ plugin\0"
+      VALUE "FileVersion", "@NVP_VERSION_FOUR_PART@\0"
+      VALUE "InternalName", "NotepadViewerPlus.dll\0"
+      VALUE "LegalCopyright", "Copyright (c) 2026 Duc Le\0"
+      VALUE "OriginalFilename", "NotepadViewerPlus.dll\0"
+      VALUE "ProductName", "Notepad Viewer Plus\0"
+      VALUE "ProductVersion", "@NVP_VERSION_FOUR_PART@\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

@@ -2,12 +2,12 @@
 
 ## Product Phase 2 — Multi-format preview plan
 
-**Status:** In progress
-**Current product:** Markdown Preview Plus 0.1.5 baseline (tagged `v0.1.5`)
+**Status:** Automated implementation complete; manual release validation pending
+**Historical baseline:** Markdown Preview Plus 0.1.5 (tagged `v0.1.5`)
 **Target product:** Notepad Viewer Plus 0.2.0
 **Scope:** Offline, view-only previews inside the existing Notepad++ docked WebView2 panel
 
-**Implementation checkpoint:** P2.0/P2.1 are implemented in the current working tree, with the low-risk P2.2/P2.3 viewers included behind the registry. HTML/OpenAPI and PDF require the remaining isolation/compatibility validation before release sign-off. The repository remains at its user-specified local path `markdown-preview-plus`; public binary, package, settings, and WebView identities use `NotepadViewerPlus`.
+**Implementation checkpoint:** P2.0–P2.5 are implemented in the current working tree with automated renderer/native/security coverage. Phase 3 adds the release identity, toolbar/About UX, x64/x86 package validator, and Plugin Admin handoff. PDF/WebView2, OpenAPI network/CSP behavior, supported Notepad++ versions, installation/upgrade, toolbar/DPI, and Plugin Admin flows still require the recorded manual release matrix before sign-off. The canonical repository folder is `notepad-viewer-plus`; public binary, package, settings, and WebView identities use `NotepadViewerPlus`. Existing old-path checkouts can be migrated with `Rename-ProjectFolder.ps1` after closing Pi/IDEs; see `docs/project-name-migration.md`.
 
 > This is product Phase 2. It is separate from the implementation phases in `PLAN-AND-ARCHITECTURE.md` that delivered the Markdown-only product.
 

@@ -2,6 +2,8 @@ import { DiagramRenderer, type DiagramEngine, type DiagramPlaceholder } from "..
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
 export class DiagramViewer implements ViewerAdapter {
+  public readonly themeBehavior = "theme-aware" as const;
+
   public constructor(
     public readonly id: "mermaid" | "plantuml",
     private readonly diagrams: DiagramRenderer
@@ -22,7 +24,7 @@ export class DiagramViewer implements ViewerAdapter {
     };
     context.root.innerHTML = `<section class="mpp-diagram" data-mpp-diagram="${id}" data-mpp-engine="${this.id}" aria-live="polite"><div class="mpp-diagram-loading">Rendering ${this.id} diagram…</div></section>`;
     await this.diagrams.renderAll(context.root, [placeholder], {
-      theme: context.update.theme,
+      theme: context.effectiveTheme,
       generation: context.update.generation,
       isCurrent: context.isCurrent
     });

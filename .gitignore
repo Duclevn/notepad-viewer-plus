@@ -3,13 +3,36 @@ renderer/node_modules/
 renderer/dist/
 renderer/.vite/
 
-# Native build output
+# Native build output and CPack staging
 build/
+build-*/
+_CPack_Packages/
 out/
 *.obj
 *.pdb
 *.ilk
 *.suo
+
+# WebView2 headers and x64/x86 static loaders required by fresh native builds
+!third_party/Microsoft.Web.WebView2/build/
+third_party/Microsoft.Web.WebView2/build/*
+!third_party/Microsoft.Web.WebView2/build/native/
+third_party/Microsoft.Web.WebView2/build/native/*
+!third_party/Microsoft.Web.WebView2/build/native/include/
+third_party/Microsoft.Web.WebView2/build/native/include/*
+!third_party/Microsoft.Web.WebView2/build/native/include/WebView2.h
+!third_party/Microsoft.Web.WebView2/build/native/include/WebView2EnvironmentOptions.h
+!third_party/Microsoft.Web.WebView2/build/native/x64/
+third_party/Microsoft.Web.WebView2/build/native/x64/*
+!third_party/Microsoft.Web.WebView2/build/native/x64/WebView2LoaderStatic.lib
+!third_party/Microsoft.Web.WebView2/build/native/x86/
+third_party/Microsoft.Web.WebView2/build/native/x86/*
+!third_party/Microsoft.Web.WebView2/build/native/x86/WebView2LoaderStatic.lib
+
+# Local release packages, validation reports, and generated installers
+/*.zip
+/*.zip.validation.json
+/Install-NotepadViewerPlus-*.ps1
 
 # Local validation logs
 *.log

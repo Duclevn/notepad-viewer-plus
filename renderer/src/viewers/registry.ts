@@ -37,7 +37,9 @@ export class ViewerRegistry {
   }
 
   public async render(context: ViewerContext): Promise<ViewerResult> {
-    return this.resolve(context).render(context);
+    const adapter = this.resolve(context);
+    context.root.dataset.mppThemeBehavior = adapter.themeBehavior;
+    return adapter.render(context);
   }
 
   public dispose(): void {

@@ -8,6 +8,7 @@ interface MathRequest {
   type: "render";
   expression: string;
   displayMode: boolean;
+  theme: "light" | "dark";
 }
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -22,6 +23,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       strict: "ignore"
     });
     document.documentElement.dataset.display = String(event.data.displayMode);
+    document.documentElement.dataset.theme = event.data.theme;
     document.body.innerHTML = sanitizeGeneratedMath(html);
     const rendered = document.querySelector<HTMLElement>(event.data.displayMode ? ".katex-display" : ".katex");
     if (!rendered) throw new Error("KaTeX produced no measurable output");
@@ -49,5 +51,6 @@ function pixelValue(value: string): number {
 function isMathRequest(value: unknown): value is MathRequest {
   if (!value || typeof value !== "object") return false;
   const request = value as Record<string, unknown>;
-  return request.type === "render" && typeof request.expression === "string" && request.expression.length <= 8192 && typeof request.displayMode === "boolean";
+  return request.type === "render" && typeof request.expression === "string" && request.expression.length <= 8192 &&
+    typeof request.displayMode === "boolean" && (request.theme === "light" || request.theme === "dark");
 }

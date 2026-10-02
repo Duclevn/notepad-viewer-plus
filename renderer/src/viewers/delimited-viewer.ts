@@ -11,6 +11,7 @@ const ROW_HEIGHT = 30;
 
 export class DelimitedViewer implements ViewerAdapter {
   public readonly id = "csv" as const;
+  public readonly themeBehavior = "native" as const;
   private cleanup: (() => void) | undefined;
 
   public canRender(context: ViewerContext): boolean {

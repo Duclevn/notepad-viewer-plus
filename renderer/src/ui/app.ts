@@ -2,6 +2,7 @@ import { GenerationGate, RendererBridge } from "../bridge/bridge";
 import { makeRenderCompleteMessage, makeRenderErrorMessage, type PreviewUpdate } from "../bridge/protocol";
 import { bindResourceEvents } from "../security/resource-policy";
 import { ViewerRegistry } from "../viewers/registry";
+import { resolveEffectiveTheme, shouldRefreshForSystemTheme, systemThemeQuery } from "./theme";
 import "./styles.css";
 
 function requiredElement<T extends Element>(selector: string): T {
@@ -14,7 +15,19 @@ export class ViewerShell {
   private readonly gate = new GenerationGate();
   private readonly bridge = new RendererBridge();
   private readonly registry = new ViewerRegistry();
+  private readonly themeQuery = systemThemeQuery();
+  private readonly onSystemThemeChange = (): void => {
+    if (!this.currentUpdate) return;
+    const nextTheme = resolveEffectiveTheme(this.currentUpdate.theme, this.themeQuery?.matches);
+    if (shouldRefreshForSystemTheme(this.currentUpdate.theme, this.effectiveTheme, nextTheme)) {
+      // The document generation is unchanged, so avoid a duplicate completion message to the native host.
+      void this.renderUpdate(this.currentUpdate, false);
+    }
+  };
   private activeDirectoryToken: string | undefined;
+  private currentUpdate: PreviewUpdate | undefined;
+  private effectiveTheme: "light" | "dark" | undefined;
+  private renderSequence = 0;
 
   public constructor(
     private readonly statusElement: HTMLElement,
@@ -27,6 +40,7 @@ export class ViewerShell {
       void this.renderUpdate(update);
     });
     this.bridge.start();
+    this.themeQuery?.addEventListener("change", this.onSystemThemeChange);
     bindResourceEvents(this.previewElement, this.bridge, () => this.activeDirectoryToken);
     this.previewElement.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button[data-copy-code],button[data-mpp-copy-value]") : undefined;
@@ -39,10 +53,16 @@ export class ViewerShell {
     });
   }
 
-  public async renderUpdate(update: PreviewUpdate): Promise<void> {
+  public async renderUpdate(update: PreviewUpdate, notifyHost = true): Promise<void> {
     if (!this.gate.accept(update.generation)) return;
+    this.currentUpdate = update;
+    const renderSequence = ++this.renderSequence;
+    const isCurrent = (): boolean => this.gate.isCurrent(update.generation) && renderSequence === this.renderSequence;
+    const effectiveTheme = resolveEffectiveTheme(update.theme, this.themeQuery?.matches);
+    this.effectiveTheme = effectiveTheme;
     this.activeDirectoryToken = update.directoryToken;
     document.documentElement.dataset.theme = update.theme;
+    document.documentElement.dataset.effectiveTheme = effectiveTheme;
     this.previewElement.classList.toggle("mpp-no-wrap", !update.settings.codeWrapping);
     this.setStatus("Rendering…", "loading");
     const scroll = captureScroll();
@@ -51,26 +71,28 @@ export class ViewerShell {
     try {
       const result = await this.registry.render({
         update,
+        effectiveTheme,
         root: this.previewElement,
         directoryToken: this.activeDirectoryToken,
-        isCurrent: () => this.gate.isCurrent(update.generation)
+        isCurrent
       });
-      if (!this.gate.isCurrent(update.generation)) return;
+      if (!isCurrent()) return;
       this.previewElement.hidden = false;
       restoreScroll(scroll);
       this.setStatus("", "ready");
       if (result.warnings && result.warnings.length > 0) this.showWarning(result.warnings.join("; "));
-      this.bridge.post(makeRenderCompleteMessage(update.generation));
+      if (notifyHost) this.bridge.post(makeRenderCompleteMessage(update.generation));
     } catch (error) {
-      if (!this.gate.isCurrent(update.generation)) return;
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : "Preview could not be rendered";
       this.showWarning(message);
       this.setStatus("Preview error", "error");
-      this.bridge.post(makeRenderErrorMessage(update.generation, message));
+      if (notifyHost) this.bridge.post(makeRenderErrorMessage(update.generation, message));
     }
   }
 
   public dispose(): void {
+    this.themeQuery?.removeEventListener("change", this.onSystemThemeChange);
     this.registry.dispose();
     this.bridge.stop();
   }

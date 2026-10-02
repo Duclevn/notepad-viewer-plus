@@ -1,6 +1,8 @@
-# Markdown Preview Plus for Notepad++
+# Notepad Viewer Plus for Notepad++
 
 ## Plan and Architecture — Optimized Edition
+
+> Historical Phase 1 plan for the Markdown-only baseline. The current product is Notepad Viewer Plus; see `PHASE-2-MULTI-FORMAT-PLAN.md` and `README.md` for current behavior, packaging, and supported architectures.
 
 **Status:** Initial x64 release implemented and validated  
 **Implementation status:** Renderer, native WebView2 host, native tests, packaging, local Notepad++ smoke testing, and the 0.1.5 panel/shortcut/table-of-contents UX follow-up completed  
@@ -9,7 +11,7 @@
 
 ## 1. Executive summary
 
-Markdown Preview Plus will be a lightweight Notepad++ plugin that renders the active Markdown document in a browser-friendly docked preview. In addition to normal Markdown, it will support:
+Notepad Viewer Plus started as a lightweight Notepad++ plugin that renders the active Markdown document in a browser-friendly docked preview. In addition to normal Markdown, it will support:
 
 - PlantUML fenced blocks
 - Mermaid fenced blocks
@@ -563,9 +565,8 @@ Node.js is a build-time dependency only.
 ### 10.2 Release layout
 
 ```text
-MarkdownPreviewPlus/
-├─ MarkdownPreviewPlus.dll
-├─ WebView2Loader.dll
+NotepadViewerPlus/
+├─ NotepadViewerPlus.dll
 ├─ assets/
 │  ├─ index.html
 │  ├─ base.*.js

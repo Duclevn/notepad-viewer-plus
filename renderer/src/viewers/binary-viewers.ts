@@ -1,7 +1,9 @@
+import { createArtboardControls } from "./artboard";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
 export class ImageViewer implements ViewerAdapter {
   public readonly id = "image" as const;
+  public readonly themeBehavior = "selectable-canvas" as const;
   private cleanup: (() => void) | undefined;
 
   public canRender(context: ViewerContext): boolean {
@@ -28,7 +30,7 @@ export class ImageViewer implements ViewerAdapter {
     image.draggable = false;
 
     const viewport = document.createElement("div");
-    viewport.className = "mpp-image-viewport";
+    viewport.className = "mpp-image-viewport mpp-artboard";
     viewport.appendChild(image);
     const scaleLabel = document.createElement("span");
     scaleLabel.className = "mpp-image-scale";
@@ -66,7 +68,8 @@ export class ImageViewer implements ViewerAdapter {
       button("−", () => { actual = true; setScale(scale / 1.25); }),
       button("+", () => { actual = true; setScale(scale * 1.25); }),
       button("Reset", () => { actual = false; setFit(); }),
-      scaleLabel
+      scaleLabel,
+      createArtboardControls(viewport, "checkerboard")
     );
     context.root.append(toolbar, viewport);
     const onError = (): void => image.replaceWith(unavailable("Image could not be decoded or loaded."));
@@ -83,6 +86,7 @@ export class ImageViewer implements ViewerAdapter {
 
 export class PdfViewer implements ViewerAdapter {
   public readonly id = "pdf" as const;
+  public readonly themeBehavior = "isolated" as const;
 
   public canRender(context: ViewerContext): boolean {
     return context.update.source.kind === "resource" &&
@@ -99,7 +103,9 @@ export class PdfViewer implements ViewerAdapter {
     frame.className = "mpp-pdf-viewer";
     frame.title = context.update.file.name;
     frame.referrerPolicy = "no-referrer";
-    frame.setAttribute("sandbox", "");
+    // Chromium/WebView2's built-in PDF viewer does not render inside a sandboxed iframe.
+    // The exact-file URL remains isolated from the app origin and is guarded by the native
+    // navigation/resource policy, so do not copy the HTML viewer's sandbox here.
     frame.src = context.update.source.url;
     context.root.appendChild(frame);
     return {};

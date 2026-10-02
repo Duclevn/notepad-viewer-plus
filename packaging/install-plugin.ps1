@@ -9,14 +9,26 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 function Get-LatestPackage {
-    $generatedDir = Join-Path $HOME '.pi\Generated'
-    if (-not (Test-Path -LiteralPath $generatedDir -PathType Container)) {
-        return $null
+    $directories = @()
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $directories += Split-Path -Parent $PSScriptRoot
+    }
+    $directories += Join-Path $HOME '.pi\Generated'
+
+    foreach ($directory in $directories) {
+        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+            continue
+        }
+        $candidate = Get-ChildItem -LiteralPath $directory -Filter 'NotepadViewerPlus-*.zip' -File |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+        if ($candidate) {
+            Write-Verbose "Selected plugin package: $($candidate.FullName)"
+            return $candidate.FullName
+        }
     }
 
-    return Get-ChildItem -LiteralPath $generatedDir -Filter 'NotepadViewerPlus-*.zip' -File |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1 -ExpandProperty FullName
+    return $null
 }
 
 function Find-NotepadRoot {
@@ -98,8 +110,13 @@ try {
     Expand-Archive -LiteralPath $ZipPath -DestinationPath $staging -Force
 
     if (-not (Test-Path -LiteralPath (Join-Path $staging 'NotepadViewerPlus.dll') -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $staging 'assets') -PathType Container)) {
-        throw 'The ZIP is missing NotepadViewerPlus.dll or assets/. '
+        -not (Test-Path -LiteralPath (Join-Path $staging 'assets\index.html') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $staging 'THIRD-PARTY-LICENSES.txt') -PathType Leaf)) {
+        throw 'The ZIP is missing NotepadViewerPlus.dll, assets/index.html, or THIRD-PARTY-LICENSES.txt.'
+    }
+    $rootDlls = @(Get-ChildItem -LiteralPath $staging -Filter '*.dll' -File)
+    if ($rootDlls.Count -ne 1 -or $rootDlls[0].Name -cne 'NotepadViewerPlus.dll') {
+        throw 'The ZIP must contain exactly NotepadViewerPlus.dll at its root.'
     }
 
     $parent = Split-Path -Parent $TargetDir

@@ -8,7 +8,7 @@ Versions are pinned in `renderer/package-lock.json`. This list covers the primar
 | `@mermaid-js/tiny` | 12.0.0 | MIT | Offline Mermaid Tiny runtime; packaged as `vendor/mermaid-tiny.js` |
 | `dompurify` | 3.4.16 | MPL-2.0 OR Apache-2.0 | HTML, MathML, and SVG sanitization |
 | `highlight.js` | 11.12.0 | BSD-3-Clause | Explicitly allowlisted lazy code grammars |
-| `js-yaml` | 4.1.1 | MIT | Safe-schema front matter parsing |
+| `js-yaml` | 4.3.2 | MIT | Safe-schema front matter parsing |
 | `katex` | 0.18.9 | MIT | Lazy local math renderer |
 | `markdown-it` | 15.0.2 | MIT | Markdown parser |
 | `markdown-it-container` | 4.0.0 | MIT | Container admonition blocks |

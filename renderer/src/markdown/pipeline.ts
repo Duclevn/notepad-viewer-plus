@@ -8,19 +8,20 @@ import { installMathPlugin, type MathPlaceholder } from "./math";
 import { installDiagramPlugin, type DiagramPlaceholder } from "../diagrams/diagrams";
 import { escapeText, sanitizeHtml } from "../security/sanitize";
 
+export interface TableOfContentsEntry {
+  id: string;
+  level: number;
+  title: string;
+}
+
 export interface RenderResult {
   generation: number;
   html: string;
   frontMatter: FrontMatterResult;
   math: MathPlaceholder[];
   diagrams: DiagramPlaceholder[];
+  toc: TableOfContentsEntry[];
   hasHighlightedCode: boolean;
-}
-
-interface TableOfContentsHeading {
-  id: string;
-  level: number;
-  title: string;
 }
 
 export class MarkdownPipeline {
@@ -32,7 +33,7 @@ export class MarkdownPipeline {
     const normalized = normalizeAdmonitions(source);
     const math: MathPlaceholder[] = [];
     const diagrams: DiagramPlaceholder[] = [];
-    const headings: TableOfContentsHeading[] = [];
+    const headings: TableOfContentsEntry[] = [];
     const headingIds = new Set<string>();
     let codeSequence = 0;
 
@@ -45,27 +46,25 @@ export class MarkdownPipeline {
     installAdmonitionPlugin(md);
     installGitHubCompatibility(md);
 
-    if (update.settings.showTableOfContents) {
-      const defaultHeadingOpen = md.renderer.rules.heading_open;
-      md.renderer.rules.heading_open = (tokens, index, options, env, self): string => {
-        const token = tokens[index];
-        const inline = tokens[index + 1];
-        if (token && /^h[1-6]$/u.test(token.tag) && inline?.type === "inline") {
-          const title = headingText(inline);
-          const baseId = slugifyHeading(title);
-          let id = baseId;
-          for (let suffix = 2; headingIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
-          headingIds.add(id);
-          token.attrSet("id", id);
-          if (headings.length < MAX_TOC_HEADINGS) {
-            headings.push({ id, level: Number(token.tag.slice(1)), title });
-          }
+    const defaultHeadingOpen = md.renderer.rules.heading_open;
+    md.renderer.rules.heading_open = (tokens, index, options, env, self): string => {
+      const token = tokens[index];
+      const inline = tokens[index + 1];
+      if (token && /^h[1-6]$/u.test(token.tag) && inline?.type === "inline") {
+        const title = headingText(inline);
+        const baseId = slugifyHeading(title);
+        let id = baseId;
+        for (let suffix = 2; headingIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
+        headingIds.add(id);
+        token.attrSet("id", id);
+        if (headings.length < MAX_TOC_HEADINGS) {
+          headings.push({ id, level: Number(token.tag.slice(1)), title });
         }
-        return defaultHeadingOpen
-          ? defaultHeadingOpen(tokens, index, options, env, self)
-          : self.renderToken(tokens, index, options);
-      };
-    }
+      }
+      return defaultHeadingOpen
+        ? defaultHeadingOpen(tokens, index, options, env, self)
+        : self.renderToken(tokens, index, options);
+    };
 
     md.renderer.rules.fence = (tokens, index, _options, _env, _self): string => {
       const token = tokens[index];
@@ -79,11 +78,7 @@ export class MarkdownPipeline {
       generation: update.generation
     });
 
-    let bodyHtml = md.render(normalized.source);
-    if (update.settings.showTableOfContents && headings.length > 0) {
-      bodyHtml = `${renderTableOfContents(headings)}${bodyHtml}`;
-    }
-    bodyHtml = sanitizeHtml(bodyHtml, update.settings.rawHtml);
+    const bodyHtml = sanitizeHtml(md.render(normalized.source), update.settings.rawHtml);
     const metadata = this.renderFrontMatter(frontMatter, update.settings.showFrontMatter);
     const warning = frontMatter.warning ? `<div class="mpp-warning" role="alert">${escapeText(frontMatter.warning)}</div>` : "";
     const html = `${warning}${metadata}${bodyHtml}`;
@@ -94,6 +89,7 @@ export class MarkdownPipeline {
       frontMatter,
       math,
       diagrams,
+      toc: headings,
       hasHighlightedCode: codeSequence > 0
     };
   }
@@ -134,13 +130,6 @@ function slugifyHeading(value: string): string {
     .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
     .replace(/^-+|-+$/gu, "");
   return slug || "section";
-}
-
-function renderTableOfContents(headings: TableOfContentsHeading[]): string {
-  const items = headings.map((heading) =>
-    `<li class="mpp-toc-level-${heading.level}"><a href="#${escapeText(heading.id)}">${escapeText(heading.title)}</a></li>`
-  ).join("");
-  return `<aside class="mpp-toc" aria-label="Table of contents"><details open><summary>Table of contents</summary><ul class="mpp-toc-list">${items}</ul></details></aside>`;
 }
 
 function isMetadataRecord(value: unknown): value is Record<string, unknown> {

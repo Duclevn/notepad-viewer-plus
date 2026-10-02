@@ -1,6 +1,6 @@
 # ADR-0002 — Phase 2 frame and resource isolation
 
-**Status:** Accepted for the main shell and HTML/SVG viewers; PDF viewer decision remains pending compatibility smoke testing.
+**Status:** Accepted for the main shell, HTML/SVG viewers, and the built-in WebView2 PDF viewer.
 **Date:** 2026-02-01
 
 ## Context
@@ -41,11 +41,13 @@ object-src 'none';
 
 Author CSS is omitted until a separately reviewed CSS sanitizer exists. HTML images are rewritten to the constrained `doc.local` directory service; external HTML resources are removed. The HTML adapter has no frame message channel. If a future frame message channel is added, handlers must require `event.source === frame.contentWindow` and validate a versioned schema.
 
+The PDF viewer uses the built-in WebView2 PDF viewer in an iframe without an HTML `sandbox` attribute. Chromium/WebView2 does not initialize its PDF viewer when the PDF iframe is sandboxed, including with `allow-scripts` or `allow-same-origin`. The iframe points only to the active opaque exact-file URL on `doc.local`, which remains a separate origin from `app.local`; native frame-navigation and resource interception remain authoritative, and the renderer installs no message channel for the PDF frame. The built-in viewer's own browser isolation is relied on for PDF rendering; embedded PDF actions remain view-only to the extent enforced by that viewer and the native navigation policy.
+
 Standalone SVG is parsed as XML, stripped of active elements/event attributes/external references, dimension-bounded, converted to a Blob URL, and displayed through an image element. Generated diagram SVG continues to use the stricter diagram policy. Diagram frames use an opaque-origin `sandbox="allow-scripts"`, so their `postMessage` target is necessarily `*`; the parent verifies `event.source === frame.contentWindow`, validates the ready/response schema, and sends render results through a transferred `MessagePort`.
 
 OpenAPI specifications are parsed in memory. Every `$ref` is checked before rendering and only same-document fragments are accepted. A pinned Swagger UI distribution is loaded as a local lazy chunk with an in-memory `spec`; it is documentation-only with no Try It Out, validator, config URL, authorization persistence, OAuth redirect, remote definition, or network request path. All specification strings are sanitized before they are passed to the UI, and a safe local summary fallback is used when the chunk cannot load.
 
-No Blob worker or PDF.js worker is authorized by this ADR. The PDF decision is a separate spike: either a built-in WebView2 PDF resource or a local PDF.js bundle may be selected only after measuring offline behavior, range requests, view-only controls, CSP, package size, memory, and x64/Win32 smoke behavior. If PDF.js is selected, this ADR must be amended with an explicit local worker/font/map policy and regression tests before release.
+No Blob worker or PDF.js worker is authorized by this ADR. The built-in WebView2 PDF path is intentionally retained instead of adding a PDF.js runtime; compatibility smoke testing must still verify range delivery, corrupt/large-file handling, replacement/revocation, view-only behavior, and x64/Win32 host behavior before release.
 
 ## Security regression matrix
 

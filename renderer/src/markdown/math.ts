@@ -21,6 +21,13 @@ interface InlineState {
   push(type: string, tag: string, nesting: number): { meta?: unknown };
 }
 
+interface MathFrameRequest {
+  type: "render";
+  expression: string;
+  displayMode: boolean;
+  theme: "light" | "dark";
+}
+
 interface MathFrameResponse {
   ok: boolean;
   width?: number;
@@ -105,7 +112,12 @@ export function installMathPlugin(
   };
 }
 
-export async function renderMathPlaceholders(root: ParentNode, placeholders: MathPlaceholder[], isCurrent: () => boolean = () => true): Promise<void> {
+export async function renderMathPlaceholders(
+  root: ParentNode,
+  placeholders: MathPlaceholder[],
+  theme: "light" | "dark",
+  isCurrent: () => boolean = () => true
+): Promise<void> {
   for (const placeholder of placeholders) {
     if (!isCurrent()) return;
     const element = root.querySelector<HTMLElement>(`[data-mpp-math="${placeholder.id}"]`);
@@ -118,7 +130,7 @@ export async function renderMathPlaceholders(root: ParentNode, placeholders: Mat
     element.replaceWith(frame);
 
     try {
-      const response = await renderInFrame(frame, placeholder);
+      const response = await renderInFrame(frame, placeholder, theme);
       if (!isCurrent()) return;
       if (!response.ok) throw new Error(response.message ?? "Math expression could not be rendered");
       frame.setAttribute("height", String(clamp(response.height ?? 24, 24, 10_000)));
@@ -132,7 +144,7 @@ export async function renderMathPlaceholders(root: ParentNode, placeholders: Mat
   }
 }
 
-async function renderInFrame(frame: HTMLIFrameElement, placeholder: MathPlaceholder): Promise<MathFrameResponse> {
+async function renderInFrame(frame: HTMLIFrameElement, placeholder: MathPlaceholder, theme: "light" | "dark"): Promise<MathFrameResponse> {
   const ready = waitForFrame(frame, "math-frame.ready");
   frame.src = new URL("math-frame.html", document.baseURI).toString();
   await ready;
@@ -146,7 +158,8 @@ async function renderInFrame(frame: HTMLIFrameElement, placeholder: MathPlacehol
     };
     channel.port1.start();
   });
-  frame.contentWindow?.postMessage({ type: "render", expression: placeholder.expression, displayMode: placeholder.displayMode }, "*", [channel.port2]);
+  const request: MathFrameRequest = { type: "render", expression: placeholder.expression, displayMode: placeholder.displayMode, theme };
+  frame.contentWindow?.postMessage(request, "*", [channel.port2]);
   return response;
 }
 

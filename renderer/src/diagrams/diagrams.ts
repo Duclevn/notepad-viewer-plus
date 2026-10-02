@@ -53,7 +53,7 @@ export function installDiagramPlugin(md: InstanceType<typeof MarkdownIt>, placeh
 }
 
 export interface DiagramRenderOptions {
-  theme: "light" | "dark" | "system";
+  theme: "light" | "dark";
   generation: number;
   isCurrent: () => boolean;
 }
@@ -63,7 +63,7 @@ interface FrameRequest {
   id: string;
   engine: DiagramEngine;
   source: string;
-  theme: "light" | "dark" | "system";
+  theme: "light" | "dark";
 }
 
 interface FrameResponse {

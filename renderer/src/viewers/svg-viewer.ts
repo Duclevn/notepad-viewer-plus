@@ -1,8 +1,10 @@
 import { sanitizeStandaloneSvg } from "../security/sanitize";
+import { createArtboardControls } from "./artboard";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
 export class SvgViewer implements ViewerAdapter {
   public readonly id = "svg" as const;
+  public readonly themeBehavior = "selectable-canvas" as const;
   private objectUrl: string | undefined;
 
   public canRender(context: ViewerContext): boolean {
@@ -27,7 +29,14 @@ export class SvgViewer implements ViewerAdapter {
     image.alt = context.update.file.name;
     this.objectUrl = URL.createObjectURL(new Blob([sanitized], { type: "image/svg+xml" }));
     image.src = this.objectUrl;
-    context.root.appendChild(image);
+
+    const viewport = document.createElement("div");
+    viewport.className = "mpp-image-viewport mpp-svg-viewport mpp-artboard";
+    viewport.appendChild(image);
+    const toolbar = document.createElement("div");
+    toolbar.className = "mpp-image-toolbar";
+    toolbar.appendChild(createArtboardControls(viewport, "light"));
+    context.root.append(toolbar, viewport);
     return {};
   }
 

@@ -21,6 +21,7 @@ declare module "swagger-ui-dist/swagger-ui-bundle.js" {
 declare module "swagger-ui-dist/swagger-ui.css";
 
 declare module "@plantuml/core/plantuml.js" {
+  export function render(lines: string[], targetId: string, options?: { dark?: boolean }): void;
   export function renderToString(
     lines: string[],
     onSuccess: (svg: string) => void,

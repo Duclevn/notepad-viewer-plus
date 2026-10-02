@@ -1,12 +1,14 @@
 #pragma once
 
 #include "DocumentCoordinator.h"
+#include "PluginCommands.h"
 #include "PluginConstants.h"
 #include "../preview/PreviewPanel.h"
 #include "../settings/SettingsService.h"
 
 #include <PluginInterface.h>
 #include <Docking.h>
+#include <Notepad_plus_msgs.h>
 
 #include <memory>
 #include <string>
@@ -23,6 +25,8 @@ class PluginEntry final {
 
  private:
   void OnReady();
+  void RegisterToolbarIcon();
+  void ShowAbout();
   void TogglePreview();
   void RefreshPreview();
   void ToggleAutoRefresh();
@@ -39,7 +43,7 @@ class PluginEntry final {
   static void ThemeLightCommand();
   static void ThemeDarkCommand();
   static void ThemeSystemCommand();
-  static void SettingsCommand();
+  static void AboutCommand();
 
   NppData nppData_{};
   SettingsService* settingsService_{nullptr};
@@ -49,8 +53,10 @@ class PluginEntry final {
   std::unique_ptr<SettingsService> settingsOwner_;
   FuncItem functions_[CommandCount]{};
   ShortcutKey togglePreviewShortcut_{true, true, false, 'P'};
+  toolbarIconsWithDarkMode toolbarIcons_{};
   std::string activeToken_;
   bool showPanelOnReady_{false};
+  bool toolbarRegistered_{false};
   bool initialized_{false};
 };
 

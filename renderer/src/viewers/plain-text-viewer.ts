@@ -2,6 +2,7 @@ import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
 export class PlainTextViewer implements ViewerAdapter {
   public readonly id = "plain-text" as const;
+  public readonly themeBehavior = "native" as const;
 
   public canRender(_context: ViewerContext): boolean {
     return true;

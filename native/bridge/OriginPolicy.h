@@ -12,4 +12,14 @@ constexpr bool IsAllowedAppMessageSource(std::string_view source) noexcept {
   return source == kAllowedAppMessageSource;
 }
 
+// Child iframes are restricted to packaged sandboxed frames, exact PDF files,
+// and local sandboxed srcdoc documents. In Chromium, newly attached iframes
+// navigate to "about:blank" initially before "about:srcdoc" is loaded.
+constexpr bool IsAllowedFrameUri(std::wstring_view uri) noexcept {
+  return uri == L"https://app.local/diagram-frame.html" ||
+         uri == L"https://app.local/math-frame.html" ||
+         uri == L"about:srcdoc" ||
+         uri == L"about:blank";
+}
+
 }  // namespace mpp

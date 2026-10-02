@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 3.25)
-set(NVP_VERSION "0.2.2" CACHE STRING "Notepad Viewer Plus release version")
+
+set(NVP_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/version.json")
+file(READ "${NVP_VERSION_FILE}" NVP_VERSION_JSON)
+string(JSON NVP_VERSION GET "${NVP_VERSION_JSON}" version)
+if(NOT NVP_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+  message(FATAL_ERROR "version.json must contain a three-part numeric version")
+endif()
+string(REPLACE "." ";" NVP_VERSION_PARTS "${NVP_VERSION}")
+list(GET NVP_VERSION_PARTS 0 NVP_VERSION_MAJOR)
+list(GET NVP_VERSION_PARTS 1 NVP_VERSION_MINOR)
+list(GET NVP_VERSION_PARTS 2 NVP_VERSION_PATCH)
+set(NVP_VERSION_COMMA "${NVP_VERSION_MAJOR},${NVP_VERSION_MINOR},${NVP_VERSION_PATCH},0")
+set(NVP_VERSION_FOUR_PART "${NVP_VERSION}.0")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${NVP_VERSION_FILE}")
+
 project(NotepadViewerPlus VERSION ${NVP_VERSION} LANGUAGES CXX)
 
 if(NOT WIN32)
@@ -24,9 +38,18 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/THIRD-PARTY-LICENSES.txt")
   message(FATAL_ERROR "Generate packaging/THIRD-PARTY-LICENSES.txt before configuring the native package")
 endif()
 
+set(NVP_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${NVP_GENERATED_DIR}")
+set(NVP_RESOURCE_DIR_NATIVE "${CMAKE_CURRENT_SOURCE_DIR}/native/resources")
+set(NVP_RESOURCE_IDS "${NVP_RESOURCE_DIR_NATIVE}/ResourceIds.h")
+configure_file(native/resources/Version.h.in "${NVP_GENERATED_DIR}/Version.h" @ONLY)
+configure_file(native/resources/NotepadViewerPlus.rc.in "${NVP_GENERATED_DIR}/NotepadViewerPlus.rc" @ONLY)
+
 set(NATIVE_SOURCES
   native/plugin/PluginMain.cpp
   native/plugin/PluginEntry.cpp
+  native/plugin/PluginCommands.cpp
+  native/plugin/PluginCommands.h
   native/plugin/DocumentCoordinator.cpp
   native/plugin/DocumentCoordinator.h
   native/preview/PreviewPanel.cpp
@@ -43,18 +66,20 @@ set(NATIVE_SOURCES
   native/preview/ResourcePolicy.h
   native/plugin/PluginEntry.h
   native/plugin/PluginConstants.h
-  native/resources/NotepadViewerPlus.rc
+  native/resources/ResourceIds.h
+  "${NVP_GENERATED_DIR}/NotepadViewerPlus.rc"
 )
 
 add_library(NotepadViewerPlus SHARED ${NATIVE_SOURCES})
 target_compile_features(NotepadViewerPlus PRIVATE cxx_std_17)
-target_compile_definitions(NotepadViewerPlus PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(NotepadViewerPlus PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0600)
 target_include_directories(NotepadViewerPlus PRIVATE
   "${NPP_SDK_DIR}/src"
   "${NPP_SDK_DIR}/src/DockingFeature"
   "${NPP_SDK_DIR}/PowerEditor/src"
   "${WEBVIEW2_SDK_DIR}/build/native/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/native"
+  "${NVP_GENERATED_DIR}"
 )
 if(CMAKE_GENERATOR_PLATFORM STREQUAL "Win32")
   set(WEBVIEW2_ARCH "x86")
@@ -70,15 +95,27 @@ endif()
 
 target_link_libraries(NotepadViewerPlus PRIVATE
   "${WEBVIEW2_LOADER_LIB}"
-  user32 shell32 shlwapi ole32 oleaut32 bcrypt
+  user32 shell32 shlwapi ole32 oleaut32 bcrypt comctl32
 )
 set_target_properties(NotepadViewerPlus PROPERTIES OUTPUT_NAME "NotepadViewerPlus")
 
 include(CTest)
 if(BUILD_TESTING)
-  add_executable(NotepadViewerPlusNativeTests tests/native/OriginPolicyTests.cpp tests/native/NotepadMessageTests.cpp tests/native/ProtocolTests.cpp tests/native/ResourcePolicyTests.cpp native/bridge/JsonWriter.cpp native/bridge/MessageBroker.cpp native/plugin/DocumentCoordinator.cpp native/preview/ResourcePolicy.cpp native/settings/SettingsService.cpp)
+  add_executable(NotepadViewerPlusNativeTests
+    tests/native/OriginPolicyTests.cpp
+    tests/native/NotepadMessageTests.cpp
+    tests/native/PluginCommandTests.cpp
+    tests/native/ProtocolTests.cpp
+    tests/native/ResourcePolicyTests.cpp
+    native/bridge/JsonWriter.cpp
+    native/bridge/MessageBroker.cpp
+    native/plugin/PluginCommands.cpp
+    native/plugin/DocumentCoordinator.cpp
+    native/preview/ResourcePolicy.cpp
+    native/settings/SettingsService.cpp
+  )
   target_compile_features(NotepadViewerPlusNativeTests PRIVATE cxx_std_17)
-  target_compile_definitions(NotepadViewerPlusNativeTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  target_compile_definitions(NotepadViewerPlusNativeTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0600)
   target_include_directories(NotepadViewerPlusNativeTests PRIVATE
     "${NPP_SDK_DIR}/src"
     "${NPP_SDK_DIR}/src/DockingFeature"
