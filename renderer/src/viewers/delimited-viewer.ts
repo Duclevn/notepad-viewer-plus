@@ -8,6 +8,9 @@ export interface DelimitedParseResult {
 
 const CANDIDATE_DELIMITERS = [",", ";", "|", "\t"] as const;
 const ROW_HEIGHT = 30;
+const UTF8_ENCODER = new TextEncoder();
+const TRUNCATION_MARK = "…";
+const TRUNCATION_MARK_BYTES = UTF8_ENCODER.encode(TRUNCATION_MARK).byteLength;
 
 export class DelimitedViewer implements ViewerAdapter {
   public readonly id = "csv" as const;
@@ -71,8 +74,9 @@ export function parseDelimited(
   let quoted = false;
   let truncated = false;
   const appendCell = (): void => {
-    if (new TextEncoder().encode(cell).byteLength > limits.maxCellBytes) {
-      cell = `${cell.slice(0, Math.max(0, limits.maxCellBytes - 1))}…`;
+    const boundedCell = truncateUtf8(cell, limits.maxCellBytes);
+    if (boundedCell.truncated) {
+      cell = boundedCell.value;
       truncated = true;
     }
     if (row.length >= limits.maxColumns) {
@@ -121,6 +125,23 @@ export function parseDelimited(
   }
   if (cell.length > 0 || row.length > 0 || source.endsWith(delimiter)) appendRow();
   return { delimiter, rows, truncated };
+}
+
+function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
+  if (UTF8_ENCODER.encode(value).byteLength <= maxBytes) return { value, truncated: false };
+
+  const limit = Math.max(0, maxBytes);
+  const mark = limit >= TRUNCATION_MARK_BYTES ? TRUNCATION_MARK : "";
+  const prefixLimit = limit - (mark ? TRUNCATION_MARK_BYTES : 0);
+  let prefix = "";
+  let prefixBytes = 0;
+  for (const character of value) {
+    const characterBytes = UTF8_ENCODER.encode(character).byteLength;
+    if (prefixBytes + characterBytes > prefixLimit) break;
+    prefix += character;
+    prefixBytes += characterBytes;
+  }
+  return { value: `${prefix}${mark}`, truncated: true };
 }
 
 function countOutsideQuotes(line: string, delimiter: string): number {

@@ -1,0 +1,4 @@
+@startuml
+!includeurl https://assets.example.invalid/remote.puml
+Alice -> Bob: Untrusted include must stay offline
+@enduml

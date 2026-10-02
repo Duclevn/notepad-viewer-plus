@@ -1,0 +1,10 @@
+<html>
+  <head><style>body { color: red }</style><base href="https://example.invalid/"></head>
+  <body onload="alert('xss')">
+    <script>alert('xss')</script>
+    <iframe src="https://example.invalid/frame"></iframe>
+    <a href="javascript:alert('xss')">bad link</a>
+    <img src="https://example.invalid/remote.png" onerror="alert('xss')" alt="remote">
+    <form action="https://example.invalid/submit"><input value="secret"></form>
+  </body>
+</html>

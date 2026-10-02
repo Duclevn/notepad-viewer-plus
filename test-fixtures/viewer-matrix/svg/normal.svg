@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" width="120" height="60" role="img" aria-label="Offline chart">
+  <title>Offline chart</title>
+  <rect width="120" height="60" fill="#ffffff" />
+  <path d="M10 45 L35 28 L60 36 L90 12 L110 20" fill="none" stroke="#2463eb" stroke-width="3" />
+  <circle cx="90" cy="12" r="4" fill="#e11d48" />
+</svg>

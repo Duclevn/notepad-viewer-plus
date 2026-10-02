@@ -1,0 +1,2 @@
+description: "<img src='https://assets.example.invalid/x.png'> <script>alert(1)</script>"
+url: https://assets.example.invalid/schema.yaml

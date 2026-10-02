@@ -1,0 +1,11 @@
+{
+  "name": "Viewer matrix",
+  "enabled": true,
+  "count": 2,
+  "unicode": "日本語 · العربية · 🎉",
+  "literalMarkup": "<script>must remain text</script>",
+  "items": [
+    { "id": 1, "label": "first" },
+    { "id": 2, "label": "second" }
+  ]
+}

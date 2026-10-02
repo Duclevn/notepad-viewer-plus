@@ -25,6 +25,8 @@ const SVG_ATTRIBUTES = [
   "xml:space", "xmlns", "y", "y1", "y2"
 ];
 const MATH_STYLE_PROPERTIES = new Set(["color", "height", "margin-right", "top", "vertical-align", "width"]);
+const MATH_SVG_TAGS = ["svg", "path"];
+const MATH_SVG_ATTRIBUTES = ["d", "height", "preserveAspectRatio", "style", "viewBox", "width", "xmlns"];
 const LOCAL_CSS_FRAGMENT = /^#[A-Za-z_][A-Za-z0-9_.:-]*$/u;
 const MAX_SVG_DIMENSION = 10_000;
 
@@ -62,6 +64,8 @@ function isSafeHtmlUrl(value: string): boolean {
 export function sanitizeGeneratedMath(html: string): string {
   const sanitized = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true, mathMl: true },
+    ADD_TAGS: MATH_SVG_TAGS,
+    ADD_ATTR: MATH_SVG_ATTRIBUTES,
     ALLOW_DATA_ATTR: false,
     FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "foreignObject"],
     FORBID_ATTR: ["src", "href", "xlink:href"]

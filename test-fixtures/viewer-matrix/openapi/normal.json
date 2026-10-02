@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Offline Catalog API",
+    "version": "1.0.0",
+    "description": "Local documentation only."
+  },
+  "paths": {
+    "/items": {
+      "get": {
+        "summary": "List items",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

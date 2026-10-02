@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="20" onload="alert('xss')">
+  <script>alert('xss')</script>
+  <foreignObject><img src="https://assets.example.invalid/image.png" /></foreignObject>
+  <image href="https://assets.example.invalid/image.png" />
+  <image href="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" />
+  <path d="M0 0 L10 10" style="fill:url(https://example.invalid/x)" />
+</svg>

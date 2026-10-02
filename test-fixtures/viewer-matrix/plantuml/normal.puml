@@ -1,0 +1,5 @@
+@startuml
+skinparam backgroundColor transparent
+Alice -> Bob: Offline hello
+Bob --> Alice: Ack
+@enduml

@@ -1,0 +1,3 @@
+{
+  "payload": "This deliberately has more bytes than the small test limit so the viewer must use its safe raw fallback instead of partially parsing it."
+}

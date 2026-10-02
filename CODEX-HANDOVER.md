@@ -3,6 +3,8 @@
 **Prepared:** 2026-10-02  
 **Scope:** Continue development in the interactive Codex agent on this Windows computer. This is a verified handover snapshot, not a declaration that every viewer/runtime combination passes.
 
+**Later validation update, 2026-10-02:** The multi-format testing pass added 60 offline fixtures and expanded the renderer suite to 55 passing tests. Fresh x64/x86 native builds, CTest and package validators passed. It confirmed and corrected missing KaTeX SVG geometry, positioned overbrace clipping, dark-theme print contrast and UTF-8 CSV cell truncation. The corrected x64 payload was checked in isolated Notepad++/WebView2 hosts and the final math PDF was rendered and inspected. The installed user's plugin was not replaced. See [test cases](docs/viewer-test-cases.md) and [results, final package hashes and remaining gaps](docs/viewer-validation-results.md). The original snapshot below remains historical; its defect status and package hashes do not describe the later build.
+
 ## TL;DR
 
 - Development setup is working: the current **0.3.0 x64** source built successfully, all **36 renderer tests** and the **x64 native CTest suite** passed, and the release ZIP passed structural/version/export/architecture validation.

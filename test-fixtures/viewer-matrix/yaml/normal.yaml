@@ -1,0 +1,9 @@
+title: Viewer matrix
+enabled: true
+unicode: 日本語 · العربية · 🎉
+items:
+  - id: 1
+    label: first
+  - id: 2
+    label: second
+description: "<script> remains a text value"

@@ -1,0 +1,9 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Unsafe reference", "version": "1.0.0" },
+  "paths": {
+    "/items": {
+      "get": { "$ref": "https://assets.example.invalid/remote.json#/get" }
+    }
+  }
+}

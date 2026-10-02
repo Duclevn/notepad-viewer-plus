@@ -54,6 +54,36 @@
   --mpp-json-badge-border: #3d444d;
 }
 
+@media print {
+  :root[data-effective-theme="dark"] {
+    color-scheme: light;
+    --mpp-bg: #ffffff;
+    --mpp-fg: #1f2328;
+    --mpp-muted: #59636e;
+    --mpp-border: #d1d9e0;
+    --mpp-heading-border: rgb(209 217 224 / 70%);
+    --mpp-hr-bg: #d1d9e0;
+    --mpp-subtle-bg: #f6f8fa;
+    --mpp-blockquote: #59636e;
+    --mpp-code-bg: rgb(129 139 152 / 12%);
+    --mpp-accent: #0969da;
+    --mpp-warning-bg: #fff7ed;
+    --mpp-warning-border: #fb923c;
+    --mpp-error: #b91c1c;
+    --mpp-json-key: #0550ae;
+    --mpp-json-string: #0a3069;
+    --mpp-json-number: #953800;
+    --mpp-json-boolean: #8250df;
+    --mpp-json-null: #59636e;
+    --mpp-json-bracket: #59636e;
+    --mpp-json-colon: #59636e;
+    --mpp-json-guide: #e1e4e8;
+    --mpp-json-hover-bg: #f3f4f6;
+    --mpp-json-badge-bg: #f6f8fa;
+    --mpp-json-badge-border: #d0d7de;
+  }
+}
+
 * { box-sizing: border-box; }
 
 body {

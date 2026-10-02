@@ -1,0 +1,3 @@
+<script>alert('this is text')</script>
+https://assets.example.invalid/remote.txt
+../../Windows/System32/config/SAM

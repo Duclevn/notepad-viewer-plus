@@ -1,0 +1,8 @@
+defaults: &defaults
+  color: blue
+  labels:
+    - one
+    - two
+copy:
+  <<: *defaults
+literal: "<script> stays text"

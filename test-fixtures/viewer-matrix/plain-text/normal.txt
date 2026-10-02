@@ -1,0 +1,3 @@
+Notepad Viewer Plus plain text fixture.
+Unicode: 日本語 · العربية · é · 🧪
+The viewer should preserve line breaks and literal characters exactly.
