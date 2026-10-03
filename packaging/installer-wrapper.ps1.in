@@ -2,20 +2,76 @@
 param(
     [string]$ZipPath,
     [string]$TargetDir,
-    [string]$NotepadRoot
+    [string]$NotepadRoot,
+    [switch]$NoPause
 )
 
-$installer = Join-Path $PSScriptRoot 'packaging\install-plugin.ps1'
-if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
-    throw "Installer template not found: $installer"
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Get-DefaultPackage {
+    $projectRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
+    $searched = @(Join-Path $projectRoot 'NotepadViewerPlus-@VERSION@-x64.zip')
+
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $algorithm = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($projectRoot.ToLowerInvariant())
+            $checkoutId = ([System.BitConverter]::ToString($algorithm.ComputeHash($bytes))).Replace('-', '').Substring(0, 12).ToLowerInvariant()
+        } finally {
+            $algorithm.Dispose()
+        }
+        $searched += Join-Path $env:LOCALAPPDATA "NotepadViewerPlus\development\$checkoutId\x64\packages\NotepadViewerPlus-@VERSION@-x64.zip"
+    }
+
+    foreach ($candidate in $searched) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return [System.IO.Path]::GetFullPath($candidate)
+        }
+    }
+
+    $locations = $searched -join [Environment]::NewLine
+    throw "No Notepad Viewer Plus @VERSION@ x64 package was found. Searched:`n  $locations"
 }
 
-if (-not $PSBoundParameters.ContainsKey('ZipPath')) {
-    $ZipPath = Join-Path $PSScriptRoot 'NotepadViewerPlus-@VERSION@-x64.zip'
-}
-$arguments = @{ ZipPath = $ZipPath }
-if ($PSBoundParameters.ContainsKey('TargetDir')) { $arguments.TargetDir = $TargetDir }
-if ($PSBoundParameters.ContainsKey('NotepadRoot')) { $arguments.NotepadRoot = $NotepadRoot }
+$exitCode = 0
+try {
+    $installer = Join-Path $PSScriptRoot 'packaging\install-plugin.ps1'
+    if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+        throw "Installer template not found: $installer"
+    }
 
-& $installer @arguments
-exit $LASTEXITCODE
+    if ($PSBoundParameters.ContainsKey('ZipPath')) {
+        if ([string]::IsNullOrWhiteSpace($ZipPath)) {
+            throw 'The explicit -ZipPath value cannot be empty.'
+        }
+        $ZipPath = [System.IO.Path]::GetFullPath($ZipPath)
+        if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
+            throw "The explicit package path was not found: $ZipPath"
+        }
+    } else {
+        $ZipPath = Get-DefaultPackage
+    }
+
+    $powerShell = (Get-Command powershell.exe -ErrorAction Stop).Source
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-ZipPath', $ZipPath)
+    if ($PSBoundParameters.ContainsKey('TargetDir')) { $arguments += @('-TargetDir', $TargetDir) }
+    if ($PSBoundParameters.ContainsKey('NotepadRoot')) { $arguments += @('-NotepadRoot', $NotepadRoot) }
+
+    $LASTEXITCODE = 0
+    & $powerShell @arguments
+    $installerExitCode = [int]$LASTEXITCODE
+    if ($installerExitCode -ne 0) {
+        throw "The installer failed with exit code $installerExitCode."
+    }
+    Write-Host 'Notepad Viewer Plus installation completed successfully.' -ForegroundColor Green
+} catch {
+    $exitCode = 1
+    Write-Host "Notepad Viewer Plus installation failed: $($_.Exception.Message)" -ForegroundColor Red
+} finally {
+    if (-not $NoPause) {
+        [void](Read-Host 'Press Enter to close')
+    }
+}
+
+exit $exitCode
