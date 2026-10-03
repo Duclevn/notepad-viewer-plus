@@ -1,0 +1,15 @@
+@echo off
+setlocal
+
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-NotepadViewerPlus-@VERSION@.ps1" -NoPause %*
+set "EXIT_CODE=%ERRORLEVEL%"
+
+echo.
+if "%EXIT_CODE%"=="0" (
+    echo Notepad Viewer Plus installation completed successfully.
+) else (
+    echo Notepad Viewer Plus installation failed or could not start. Exit code: %EXIT_CODE%
+)
+pause
+
+endlocal & exit /b %EXIT_CODE%

@@ -33,6 +33,7 @@ third_party/Microsoft.Web.WebView2/build/native/x86/*
 /*.zip
 /*.zip.validation.json
 /Install-NotepadViewerPlus-*.ps1
+/Install-NotepadViewerPlus-*.cmd
 
 # Local validation logs
 *.log

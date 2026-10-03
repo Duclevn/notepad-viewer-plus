@@ -94,7 +94,7 @@ Extract the matching package into:
 
 The DLL must be at `<Notepad++>\plugins\NotepadViewerPlus\NotepadViewerPlus.dll`. Restart Notepad++ after extraction. The x86 ZIP is only for 32-bit Notepad++; the x64 ZIP is only for 64-bit Notepad++.
 
-For the local x64 candidate, close Notepad++ and run `Install-NotepadViewerPlus-0.4.0.ps1`. The installer validates the essential payload, requests elevation when needed, and preserves the previous plugin directory as a rollback backup. Use `-ZipPath`, `-NotepadRoot`, or `-TargetDir` for another package or installation.
+For the local x64 candidate, close Notepad++ and double-click `Install-NotepadViewerPlus-0.4.0.cmd`. This launcher starts the matching PowerShell wrapper with a process-only execution-policy override and keeps the result visible. The installer validates the essential payload, requests elevation when needed, and preserves the previous plugin directory as a rollback backup. Use `-ZipPath`, `-NotepadRoot`, or `-TargetDir` for another package or installation.
 
 ## Toolbar artwork provenance
 
