@@ -1,7 +1,9 @@
 import { DiagramRenderer } from "../diagrams/diagrams";
+import { releaseOwnedObjectUrls } from "../object-urls";
 import { highlightCodeBlocks } from "../markdown/code";
 import { renderMathPlaceholders } from "../markdown/math";
 import { MarkdownPipeline, type TableOfContentsEntry } from "../markdown/pipeline";
+import { textSource } from "../bridge/protocol";
 import { applyResourcePolicy } from "../security/resource-policy";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
@@ -21,10 +23,21 @@ export class MarkdownViewer implements ViewerAdapter {
   }
 
   public async render(context: ViewerContext): Promise<ViewerResult> {
-    const result = await this.pipeline.render(context.update);
+    this.diagrams.cancelCurrentUpdate();
+    const result = await this.pipeline.render(context.update, context.isCurrent);
     if (!context.isCurrent()) return {};
 
-    revokeObjectUrls(context.root);
+    releaseOwnedObjectUrls(context.root);
+    if (result.fallback !== undefined) {
+      const fallback = document.createElement("pre");
+      fallback.className = "mpp-raw-fallback";
+      fallback.textContent = textSource(context.update) ?? result.fallback;
+      context.root.replaceChildren(fallback);
+      const warnings = [...(result.warnings ?? [])];
+      if (!warnings.includes(result.fallback)) warnings.push(result.fallback);
+      return { warnings };
+    }
+
     context.root.innerHTML = result.html;
     mountMarkdownLayout(context.root, result.toc, this.resolveTocOpen(context), (open) => {
       this.tocOpen = open;
@@ -34,7 +47,7 @@ export class MarkdownViewer implements ViewerAdapter {
       remoteImages: context.update.settings.remoteImages
     });
 
-    const warnings: string[] = [];
+    const warnings: string[] = [...(result.warnings ?? [])];
     await Promise.all([
       result.math.length > 0
         ? renderMathPlaceholders(context.root, result.math, context.effectiveTheme, context.isCurrent).catch((error: unknown) => {
@@ -139,9 +152,5 @@ function mountMarkdownLayout(
 
 
 export function revokeObjectUrls(root: ParentNode): void {
-  for (const element of root.querySelectorAll<HTMLElement>("[data-mpp-object-url]")) {
-    const url = element.dataset.mppObjectUrl;
-    if (url) URL.revokeObjectURL(url);
-    delete element.dataset.mppObjectUrl;
-  }
+  releaseOwnedObjectUrls(root);
 }

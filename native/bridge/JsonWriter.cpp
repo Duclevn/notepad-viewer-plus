@@ -1,9 +1,37 @@
 #include "JsonWriter.h"
 
-#include <cstdio>
 #include <utility>
 
 namespace mpp {
+namespace {
+
+void AppendEscaped(std::string& output, std::string_view value) {
+  output.reserve(output.size() + value.size() + 2);
+  output.push_back('"');
+  constexpr char hex[] = "0123456789abcdef";
+  for (const unsigned char character : value) {
+    switch (character) {
+      case '"': output += "\\\""; break;
+      case '\\': output += "\\\\"; break;
+      case '\b': output += "\\b"; break;
+      case '\f': output += "\\f"; break;
+      case '\n': output += "\\n"; break;
+      case '\r': output += "\\r"; break;
+      case '\t': output += "\\t"; break;
+      default:
+        if (character < 0x20) {
+          output += "\\u00";
+          output.push_back(hex[character >> 4]);
+          output.push_back(hex[character & 0x0f]);
+        } else {
+          output.push_back(static_cast<char>(character));
+        }
+    }
+  }
+  output.push_back('"');
+}
+
+}  // namespace
 
 void JsonWriter::BeginObject() {
   BeforeValue();
@@ -29,14 +57,14 @@ void JsonWriter::Key(std::string_view key) {
   auto& frame = frames_.back();
   if (!frame.first) json_.push_back(',');
   frame.first = false;
-  json_ += Escape(key);
+  AppendEscaped(json_, key);
   json_.push_back(':');
   frame.expectingValue = true;
 }
 
 void JsonWriter::String(std::string_view value) {
   BeforeValue();
-  json_ += Escape(value);
+  AppendEscaped(json_, value);
 }
 
 void JsonWriter::Unsigned(std::uint64_t value) {
@@ -68,28 +96,7 @@ std::string_view JsonWriter::Error() const noexcept {
 
 std::string JsonWriter::Escape(std::string_view value) {
   std::string escaped;
-  escaped.reserve(value.size() + 2);
-  escaped.push_back('"');
-  for (const unsigned char character : value) {
-    switch (character) {
-      case '"': escaped += "\\\""; break;
-      case '\\': escaped += "\\\\"; break;
-      case '\b': escaped += "\\b"; break;
-      case '\f': escaped += "\\f"; break;
-      case '\n': escaped += "\\n"; break;
-      case '\r': escaped += "\\r"; break;
-      case '\t': escaped += "\\t"; break;
-      default:
-        if (character < 0x20) {
-          char buffer[7]{};
-          std::snprintf(buffer, sizeof(buffer), "\\u%04x", character);
-          escaped += buffer;
-        } else {
-          escaped.push_back(static_cast<char>(character));
-        }
-    }
-  }
-  escaped.push_back('"');
+  AppendEscaped(escaped, value);
   return escaped;
 }
 

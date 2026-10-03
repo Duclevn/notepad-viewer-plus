@@ -1,5 +1,6 @@
 import { highlightCodeBlocks } from "../markdown/code";
 import { sanitizeHtml } from "../security/sanitize";
+import { registerCopyValue } from "./copy-values";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
 export type StructuredValue = null | boolean | number | string | StructuredValue[] | { [key: string]: StructuredValue };
@@ -237,14 +238,20 @@ function renderStructuredViewer(
   metaSpan.className = "mpp-tree-meta";
   metaSpan.textContent = `${formatLabel} • ${statsLabel}`;
 
-  const formattedText = format === "json" ? JSON.stringify(value, null, 2) : rawSource;
+  let formattedText: string | undefined;
+  const getFormattedText = (): string => {
+    if (formattedText === undefined) {
+      formattedText = format === "json" ? JSON.stringify(value, null, 2) ?? "" : rawSource;
+    }
+    return formattedText;
+  };
 
   const copyAllBtn = document.createElement("button");
   copyAllBtn.type = "button";
   copyAllBtn.className = "mpp-toolbar-btn mpp-copy-raw";
   copyAllBtn.textContent = "Copy";
   copyAllBtn.title = `Copy formatted ${formatLabel}`;
-  copyAllBtn.dataset.mppCopyValue = formattedText;
+  registerCopyValue(copyAllBtn, getFormattedText);
 
   toolbarEnd.append(metaSpan, copyAllBtn);
   toolbar.append(tabs, treeControls, toolbarEnd);
@@ -260,38 +267,44 @@ function renderStructuredViewer(
     treePane.appendChild(limitWarning("The tree was truncated at the configured node limit."));
   }
 
-  // Code pane
+  // Code pane is populated only when the user selects Code.
   const codePane = document.createElement("div");
   codePane.className = "mpp-structured-code-pane";
   codePane.hidden = true;
 
-  const codeBlock = document.createElement("div");
-  codeBlock.className = "mpp-code-block";
-  codeBlock.dataset.mppCode = "code-structured";
-  codeBlock.dataset.mppLanguage = format;
-
-  const codeToolbar = document.createElement("div");
-  codeToolbar.className = "mpp-code-toolbar";
-  const codeLang = document.createElement("span");
-  codeLang.className = "mpp-code-language";
-  codeLang.textContent = formatLabel;
-  const copyCodeBtn = document.createElement("button");
-  copyCodeBtn.type = "button";
-  copyCodeBtn.className = "mpp-copy-code";
-  copyCodeBtn.dataset.copyCode = "code-structured";
-  copyCodeBtn.textContent = "Copy";
-  codeToolbar.append(codeLang, copyCodeBtn);
-
-  const pre = document.createElement("pre");
-  const code = document.createElement("code");
-  code.className = `language-${format}`;
-  code.textContent = formattedText;
-  pre.appendChild(code);
-  codeBlock.append(codeToolbar, pre);
-  codePane.appendChild(codeBlock);
-
   // Event handlers
   let codeHighlighted = false;
+  let codeCreated = false;
+  const ensureCodePane = (): void => {
+    if (codeCreated) return;
+    codeCreated = true;
+
+    const codeBlock = document.createElement("div");
+    codeBlock.className = "mpp-code-block";
+    codeBlock.dataset.mppCode = "code-structured";
+    codeBlock.dataset.mppLanguage = format;
+
+    const codeToolbar = document.createElement("div");
+    codeToolbar.className = "mpp-code-toolbar";
+    const codeLang = document.createElement("span");
+    codeLang.className = "mpp-code-language";
+    codeLang.textContent = formatLabel;
+    const copyCodeBtn = document.createElement("button");
+    copyCodeBtn.type = "button";
+    copyCodeBtn.className = "mpp-copy-code";
+    copyCodeBtn.dataset.copyCode = "code-structured";
+    copyCodeBtn.textContent = "Copy";
+    codeToolbar.append(codeLang, copyCodeBtn);
+
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.className = `language-${format}`;
+    code.textContent = getFormattedText();
+    pre.appendChild(code);
+    codeBlock.append(codeToolbar, pre);
+    codePane.appendChild(codeBlock);
+  };
+
   const switchView = async (mode: "tree" | "code") => {
     if (mode === "tree") {
       treeTab.classList.add("mpp-tab-active");
@@ -309,6 +322,7 @@ function renderStructuredViewer(
       treePane.hidden = true;
       codePane.hidden = false;
       treeControls.hidden = true;
+      ensureCodePane();
       if (!codeHighlighted) {
         codeHighlighted = true;
         try {
@@ -599,7 +613,10 @@ function createRowActions(path: string, value: StructuredValue): HTMLElement {
   copyVal.textContent = "Copy";
   copyVal.title = "Copy value";
   copyVal.setAttribute("aria-label", `Copy value at ${path}`);
-  copyVal.dataset.mppCopyValue = value === null || typeof value !== "object" ? String(value) : JSON.stringify(value, null, 2);
+  registerCopyValue(copyVal, () => {
+    if (value === null || typeof value !== "object") return String(value);
+    return JSON.stringify(value, null, 2) ?? "";
+  });
 
   const copyPath = document.createElement("button");
   copyPath.type = "button";
@@ -607,7 +624,7 @@ function createRowActions(path: string, value: StructuredValue): HTMLElement {
   copyPath.textContent = "Path";
   copyPath.title = "Copy JSONPath";
   copyPath.setAttribute("aria-label", `Copy path ${path}`);
-  copyPath.dataset.mppCopyValue = path;
+  registerCopyValue(copyPath, () => path);
 
   actions.append(copyVal, copyPath);
   return actions;

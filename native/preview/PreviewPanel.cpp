@@ -130,8 +130,15 @@ bool PreviewPanel::Create() {
     return false;
   }
   state_ = PreviewState::Uninitialized;
-  StartWebView();
   return true;
+}
+
+void PreviewPanel::CompleteDockRegistration(bool visible) {
+  if (state_ == PreviewState::Disposed || dockRegistrationComplete_) return;
+  visible_ = visible;
+  dockRegistrationComplete_ = true;
+  if (visible_ && state_ == PreviewState::Uninitialized) StartWebView();
+  if (visibilityChanged_) visibilityChanged_(visible_);
 }
 
 void PreviewPanel::Dispose() {
@@ -159,7 +166,7 @@ void PreviewPanel::Dispose() {
 }
 
 bool PreviewPanel::IsVisible() const {
-  return window_ && IsWindowVisible(window_) != FALSE;
+  return IsOwnWindowVisible(window_);
 }
 
 void PreviewPanel::Resize() {
@@ -222,9 +229,17 @@ LRESULT PreviewPanel::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) 
       Resize();
       return 0;
     case WM_SHOWWINDOW:
-      visible_ = wParam != FALSE;
-      if (controller_) controller_->put_IsVisible(visible_ ? TRUE : FALSE);
-      if (visibilityChanged_) visibilityChanged_(visible_);
+      {
+        const bool nextVisible = wParam != FALSE;
+        if (visible_ == nextVisible) break;
+        visible_ = nextVisible;
+        if (!dockRegistrationComplete_) break;
+        if (controller_ && FAILED(controller_->put_IsVisible(visible_ ? TRUE : FALSE))) {
+          Fail(L"WebView2 preview visibility could not be updated");
+        }
+        if (visible_ && state_ == PreviewState::Uninitialized) StartWebView();
+        if (visibilityChanged_) visibilityChanged_(visible_);
+      }
       break;
     case WM_ERASEBKGND:
       return 1;
@@ -258,14 +273,14 @@ void PreviewPanel::StartWebView() {
 }
 
 void PreviewPanel::OnEnvironmentCreated(HRESULT result, ICoreWebView2Environment* environment) {
-  if (state_ == PreviewState::Disposed || FAILED(result) || !environment) {
+  if (state_ == PreviewState::Disposed || state_ == PreviewState::Failed || FAILED(result) || !environment) {
     Fail(L"Microsoft Edge WebView2 Evergreen Runtime is unavailable");
     return;
   }
   environment_ = environment;
   state_ = PreviewState::CreatingController;
   const std::weak_ptr<PreviewPanel> weakSelf = weak_from_this();
-  environment_->CreateCoreWebView2Controller(
+  const HRESULT controllerResult = environment_->CreateCoreWebView2Controller(
       window_,
       Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
           [weakSelf](HRESULT status, ICoreWebView2Controller* controller) {
@@ -273,10 +288,11 @@ void PreviewPanel::OnEnvironmentCreated(HRESULT result, ICoreWebView2Environment
             return S_OK;
           })
           .Get());
+  if (FAILED(controllerResult)) Fail(L"WebView2 preview controller creation could not be started");
 }
 
 void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* controller) {
-  if (state_ == PreviewState::Disposed || FAILED(result) || !controller) {
+  if (state_ == PreviewState::Disposed || state_ == PreviewState::Failed || FAILED(result) || !controller) {
     Fail(L"WebView2 preview controller creation failed");
     return;
   }
@@ -286,12 +302,20 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
     Fail(L"WebView2 core object is unavailable");
     return;
   }
-  controller_->put_IsVisible(visible_ ? TRUE : FALSE);
-  Resize();
   ComPtr<ICoreWebView2_3> webview3;
   if (FAILED(webview_.As(&webview3)) || !webview3 ||
       FAILED(webview3->SetVirtualHostNameToFolderMapping(kAppHost, assetsDirectory_.c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW))) {
     Fail(L"Preview assets could not be mapped to WebView2");
+    return;
+  }
+  if (FAILED(controller_->put_IsVisible(visible_ ? TRUE : FALSE))) {
+    Fail(L"WebView2 preview visibility could not be configured");
+    return;
+  }
+  RECT bounds{};
+  GetClientRect(window_, &bounds);
+  if (FAILED(controller_->put_Bounds(bounds))) {
+    Fail(L"WebView2 preview bounds could not be configured");
     return;
   }
   if (FAILED(webview_->AddWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL))) {
@@ -299,14 +323,17 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
     return;
   }
   const std::weak_ptr<PreviewPanel> weakSelf = weak_from_this();
-  webview_->add_NavigationStarting(
+  if (FAILED(webview_->add_NavigationStarting(
       Callback<ICoreWebView2NavigationStartingEventHandler>(
           [weakSelf](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) {
             if (const auto self = weakSelf.lock()) self->OnNavigationStarting(args);
             return S_OK;
           })
           .Get(),
-      &navigationToken_);
+      &navigationToken_))) {
+    Fail(L"WebView2 navigation policy could not be installed");
+    return;
+  }
   if (FAILED(webview_->add_NavigationCompleted(
           Callback<ICoreWebView2NavigationCompletedEventHandler>(
               [weakSelf](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) {
@@ -329,14 +356,17 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
     Fail(L"WebView2 frame navigation policy could not be installed");
     return;
   }
-  webview_->add_WebResourceRequested(
+  if (FAILED(webview_->add_WebResourceRequested(
       Callback<ICoreWebView2WebResourceRequestedEventHandler>(
           [weakSelf](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) {
             if (const auto self = weakSelf.lock()) self->OnWebResourceRequested(args);
             return S_OK;
           })
           .Get(),
-      &resourceToken_);
+      &resourceToken_))) {
+    Fail(L"WebView2 resource request handler could not be installed");
+    return;
+  }
   broker_->SetHandlers(
       [weakSelf] {
         if (const auto self = weakSelf.lock()) self->OnRendererReady();
@@ -354,9 +384,14 @@ void PreviewPanel::OnControllerCreated(HRESULT result, ICoreWebView2Controller* 
       [weakSelf] {
         if (const auto self = weakSelf.lock()) self->Fail(L"Preview protocol mismatch; reinstall the plugin assets");
       });
-  broker_->Attach(webview_);
+  if (!broker_->Attach(webview_)) {
+    Fail(L"WebView2 renderer message handler could not be installed");
+    return;
+  }
   state_ = PreviewState::LoadingApplication;
-  webview_->Navigate(kAppUrl);
+  if (FAILED(webview_->Navigate(kAppUrl))) {
+    Fail(L"Preview application navigation could not be started");
+  }
 }
 
 void PreviewPanel::OnRendererReady() {
@@ -527,7 +562,7 @@ void PreviewPanel::ShowFailureStatus(const wchar_t* reason) {
 }
 
 void PreviewPanel::SendPendingUpdate() {
-  if (state_ != PreviewState::Ready || !pendingUpdate_) return;
+  if (!visible_ || state_ != PreviewState::Ready || !pendingUpdate_) return;
   if (broker_->PostDocumentUpdate(*pendingUpdate_)) {
     pendingUpdate_.reset();
     return;

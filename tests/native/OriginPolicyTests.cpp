@@ -6,6 +6,7 @@ bool RunNotepadMessageTests();
 bool RunPluginCommandTests();
 bool RunProtocolTests();
 bool RunResourcePolicyTests();
+bool RunLocalDocumentOpenerTests();
 
 int main() {
   using mpp::IsAllowedAppMessageSource;
@@ -65,5 +66,6 @@ int main() {
   if (!RunResourcePolicyTests()) return 1;
   if (!RunNotepadMessageTests()) return 1;
   if (!RunPluginCommandTests()) return 1;
+  if (!RunLocalDocumentOpenerTests()) return 1;
   return 0;
 }

@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { createOwnedObjectUrl, trackOwnedObjectUrl } from "../object-urls";
 import { escapeText, sanitizeSvg } from "../security/sanitize";
 
 export type DiagramEngine = "mermaid" | "plantuml";
@@ -83,29 +84,37 @@ export class DiagramRenderer {
   private frame: DiagramFrame | undefined;
   private renderQueue: Promise<void> = Promise.resolve();
   private activeCancel: (() => void) | undefined;
+  private lifecycle = 0;
 
-  public dispose(): void {
+  /** Cancels the current document work while retaining the isolated engine realm. */
+  public cancelCurrentUpdate(): void {
     this.activeCancel?.();
     this.activeCancel = undefined;
+  }
+
+  /** Fully tears down the renderer, including the isolated engine realm. */
+  public dispose(): void {
+    this.lifecycle += 1;
+    this.cancelCurrentUpdate();
     this.frame?.cancel();
     this.frame = undefined;
     this.renderQueue = Promise.resolve();
   }
 
   public renderAll(root: ParentNode, placeholders: DiagramPlaceholder[], options: DiagramRenderOptions): Promise<void> {
-    this.activeCancel?.();
-    this.frame?.cancel();
+    this.cancelCurrentUpdate();
+    const lifecycle = this.lifecycle;
     const next = this.renderQueue.then(() => {
-      if (!options.isCurrent()) return;
-      return this.renderAllSerial(root, placeholders, options);
+      if (!options.isCurrent() || lifecycle !== this.lifecycle) return;
+      return this.renderAllSerial(root, placeholders, options, lifecycle);
     });
     this.renderQueue = next.catch(() => { /* keep later generations renderable */ });
     return next;
   }
 
-  private async renderAllSerial(root: ParentNode, placeholders: DiagramPlaceholder[], options: DiagramRenderOptions): Promise<void> {
+  private async renderAllSerial(root: ParentNode, placeholders: DiagramPlaceholder[], options: DiagramRenderOptions, lifecycle: number): Promise<void> {
     for (const placeholder of placeholders) {
-      if (!options.isCurrent()) return;
+      if (!options.isCurrent() || lifecycle !== this.lifecycle) return;
       const element = root.querySelector<HTMLElement>(`[data-mpp-diagram="${placeholder.id}"]`);
       if (!element) continue;
       try {
@@ -117,10 +126,10 @@ export class DiagramRenderer {
           svg = await this.renderInSandboxedFrame(placeholder, options);
           this.cache.set(key, svg);
         }
-        if (!options.isCurrent()) return;
+        if (!options.isCurrent() || lifecycle !== this.lifecycle) return;
         this.replaceWithSvgImage(element, svg, `${placeholder.engine} diagram`);
       } catch (error) {
-        if (!options.isCurrent()) return;
+        if (!options.isCurrent() || lifecycle !== this.lifecycle) return;
         const message = error instanceof Error ? error.message : `${placeholder.engine} diagram could not be rendered`;
         element.replaceChildren(this.makeError(message));
         element.classList.add("mpp-diagram-error");
@@ -129,33 +138,49 @@ export class DiagramRenderer {
   }
 
   private async renderInSandboxedFrame(placeholder: DiagramPlaceholder, options: DiagramRenderOptions): Promise<string> {
-    const frame = await this.loadFrame();
-    await frame.ready;
-    if (this.frame !== frame) throw new Error("Diagram render superseded by a newer document");
-    const channel = new MessageChannel();
-    let rejectResponse: ((reason?: unknown) => void) | undefined;
-    let timeout = 0;
-    const response = new Promise<FrameResponse>((resolve, reject) => {
-      rejectResponse = reject;
-      timeout = window.setTimeout(() => {
-        channel.port1.close();
-        reject(new Error("Diagram renderer timed out"));
-      }, 30_000);
-      channel.port1.onmessage = (event: MessageEvent<unknown>) => {
-        window.clearTimeout(timeout);
-        channel.port1.close();
-        if (isFrameResponse(event.data)) resolve(event.data);
-        else reject(new Error("Diagram renderer returned an invalid response"));
-      };
-      channel.port1.start();
+    let cancelled = false;
+    let rejectCancellation: ((reason?: unknown) => void) | undefined;
+    let channel: MessageChannel | undefined;
+    let transferred = false;
+    let timedOut = false;
+    let closeResponse = (): void => {};
+    const cancellation = new Promise<never>((_resolve, reject) => {
+      rejectCancellation = reject;
     });
     const cancel = (): void => {
-      window.clearTimeout(timeout);
-      channel.port1.close();
-      rejectResponse?.(new Error("Diagram render superseded by a newer document"));
+      if (cancelled) return;
+      cancelled = true;
+      closeResponse();
+      channel?.port1.close();
+      rejectCancellation?.(new Error("Diagram render superseded by a newer document"));
     };
     this.activeCancel = cancel;
     try {
+      const frame = await Promise.race([this.loadFrame(), cancellation]);
+      await Promise.race([frame.ready, cancellation]);
+      if (this.frame !== frame || !options.isCurrent()) throw new Error("Diagram render superseded by a newer document");
+      channel = new MessageChannel();
+      const response = new Promise<FrameResponse>((resolve, reject) => {
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+          timedOut = true;
+          finish(() => reject(new Error("Diagram renderer timed out")));
+        }, 30_000);
+        const finish = (complete: () => void): void => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
+          channel!.port1.onmessage = null;
+          channel!.port1.close();
+          complete();
+        };
+        closeResponse = (): void => finish(() => reject(new Error("Diagram render superseded by a newer document")));
+        channel!.port1.onmessage = (event: MessageEvent<unknown>) => {
+          if (isFrameResponse(event.data)) finish(() => resolve(event.data as FrameResponse));
+          else finish(() => reject(new Error("Diagram renderer returned an invalid response")));
+        };
+        channel!.port1.start();
+      });
       const request: FrameRequest = {
         type: "render",
         id: `${placeholder.id}-${options.generation}`,
@@ -164,10 +189,17 @@ export class DiagramRenderer {
         theme: options.theme
       };
       frame.element.contentWindow?.postMessage(request, "*", [channel.port2]);
-      const result = await response;
+      transferred = true;
+      const result = await Promise.race([response, cancellation]);
       if (!result.ok || !result.svg) throw new Error(result.message ?? "Diagram renderer failed");
       return result.svg;
     } finally {
+      closeResponse();
+      if (timedOut && this.frame) this.frame.cancel();
+      if (channel) {
+        channel.port1.close();
+        if (!transferred) channel.port2.close();
+      }
       if (this.activeCancel === cancel) this.activeCancel = undefined;
     }
   }
@@ -191,6 +223,8 @@ export class DiagramRenderer {
       if (settled || cancelled) return;
       settled = true;
       cleanup();
+      element.remove();
+      if (this.frame?.element === element) this.frame = undefined;
       rejectReady(error);
     };
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -232,15 +266,14 @@ export class DiagramRenderer {
     const sanitized = sanitizeSvg(svg);
     if (!/^\s*<svg[\s>]/iu.test(sanitized)) throw new Error("Diagram output was not a safe SVG");
     const blob = new Blob([sanitized], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
+    const url = createOwnedObjectUrl(blob);
     const image = document.createElement("img");
     image.className = "mpp-diagram-image";
     image.alt = alt;
     image.loading = "lazy";
     image.src = url;
-    element.dataset.mppObjectUrl = url;
+    trackOwnedObjectUrl(element, url);
     element.replaceChildren(image);
-    element.dataset.mppObjectUrl = url;
   }
 
   private makeError(message: string): HTMLElement {

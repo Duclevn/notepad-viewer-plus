@@ -1,3 +1,4 @@
+import { createOwnedObjectUrl, revokeOwnedObjectUrl, trackOwnedObjectUrl } from "../object-urls";
 import { sanitizeStandaloneSvg } from "../security/sanitize";
 import { createArtboardControls } from "./artboard";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
@@ -27,8 +28,9 @@ export class SvgViewer implements ViewerAdapter {
     const image = document.createElement("img");
     image.className = "mpp-svg-viewer";
     image.alt = context.update.file.name;
-    this.objectUrl = URL.createObjectURL(new Blob([sanitized], { type: "image/svg+xml" }));
+    this.objectUrl = createOwnedObjectUrl(new Blob([sanitized], { type: "image/svg+xml" }));
     image.src = this.objectUrl;
+    trackOwnedObjectUrl(image, this.objectUrl);
 
     const viewport = document.createElement("div");
     viewport.className = "mpp-image-viewport mpp-svg-viewport mpp-artboard";
@@ -45,7 +47,7 @@ export class SvgViewer implements ViewerAdapter {
   }
 
   private revoke(): void {
-    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
+    revokeOwnedObjectUrl(this.objectUrl);
     this.objectUrl = undefined;
   }
 }

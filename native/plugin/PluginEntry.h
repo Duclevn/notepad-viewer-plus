@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DocumentCoordinator.h"
+#include "LocalDocumentOpener.h"
 #include "PluginCommands.h"
 #include "PluginConstants.h"
 #include "../preview/PreviewPanel.h"
@@ -54,7 +55,6 @@ class PluginEntry final {
   FuncItem functions_[CommandCount]{};
   ShortcutKey togglePreviewShortcut_{true, true, false, 'P'};
   toolbarIconsWithDarkMode toolbarIcons_{};
-  std::string activeToken_;
   bool showPanelOnReady_{false};
   bool toolbarRegistered_{false};
   bool initialized_{false};

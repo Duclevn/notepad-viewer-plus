@@ -21,13 +21,30 @@ declare global {
 
 let mermaidPromise: Promise<MermaidApi> | undefined;
 let plantUmlPromise: Promise<PlantUmlApi> | undefined;
+let mermaidTheme: "light" | "dark" | undefined;
+
+interface PendingRender {
+  request: FrameRequest;
+  port: MessagePort;
+}
+
+let pendingRender: PendingRender | undefined;
+let rendering = false;
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (event.source !== window.parent || !event.ports[0] || !isFrameRequest(event.data)) return;
   const port = event.ports[0];
-  void render(event.data)
-    .then((svg) => port.postMessage({ ok: true, svg }))
-    .catch((error: unknown) => port.postMessage({ ok: false, message: error instanceof Error ? error.message : "Diagram rendering failed" }));
+  // The parent may supersede a queued generation while the current engine call
+  // is still running. Keep one latest pending job so the engines never overlap.
+  if (pendingRender) {
+    try {
+      sendResponse(pendingRender.port, { ok: false, message: "Diagram render superseded by a newer document" });
+    } finally {
+      pendingRender.port.close();
+    }
+  }
+  pendingRender = { request: event.data, port };
+  void drainRenderQueue();
 });
 
 window.parent.postMessage({ type: "diagram-frame.ready" }, "*");
@@ -52,16 +69,48 @@ async function render(request: FrameRequest): Promise<string> {
     svg = await renderPlantUmlToString(plantUml, request.source, request.id, request.theme === "dark");
   } else {
     const mermaid = await loadMermaid();
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      htmlLabels: false,
-      theme: request.theme === "dark" ? "dark" : "default",
-      suppressErrorRendering: true
-    });
+    if (mermaidTheme !== request.theme) {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        htmlLabels: false,
+        theme: request.theme === "dark" ? "dark" : "default",
+        suppressErrorRendering: true
+      });
+      mermaidTheme = request.theme;
+    }
     svg = (await mermaid.render(request.id.replace(/[^a-zA-Z0-9_-]/gu, "-"), request.source)).svg;
   }
   return materializeSvgPresentation(svg);
+}
+
+async function drainRenderQueue(): Promise<void> {
+  if (rendering) return;
+  rendering = true;
+  try {
+    while (pendingRender) {
+      const job = pendingRender;
+      pendingRender = undefined;
+      try {
+        const svg = await render(job.request);
+        sendResponse(job.port, { ok: true, svg });
+      } catch (error) {
+        sendResponse(job.port, { ok: false, message: error instanceof Error ? error.message : "Diagram rendering failed" });
+      } finally {
+        job.port.close();
+      }
+    }
+  } finally {
+    rendering = false;
+  }
+}
+
+function sendResponse(port: MessagePort, response: { ok: boolean; svg?: string; message?: string }): void {
+  try {
+    port.postMessage(response);
+  } catch {
+    // The parent closes superseded ports as soon as a newer generation arrives.
+  }
 }
 
 function materializeSvgPresentation(source: string): string {

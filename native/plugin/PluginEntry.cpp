@@ -218,7 +218,10 @@ void PluginEntry::OnReady() {
   panel_->SetOpenLocalHandler([this](const std::string& href, const std::string& token) {
     std::wstring absolute;
     if (!panel_ || !panel_->ResolveLocalResource(token, href, absolute)) return;
-    ShellExecuteW(nullptr, L"open", absolute.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    OpenLocalDocument(absolute, [this](const std::wstring& path) {
+      return SendMessageW(nppData_._nppHandle, NPPM_DOOPEN, 0,
+                          reinterpret_cast<LPARAM>(path.c_str())) != FALSE;
+    });
   });
   panel_->SetRendererErrorHandler([](const std::string&) {
     // PreviewPanel displays initialization failures in its non-modal status child;
@@ -229,7 +232,7 @@ void PluginEntry::OnReady() {
       SendMessage(nppData_._nppHandle, NPPM_SETMENUITEMCHECK,
                   static_cast<WPARAM>(functions_[CommandId::TogglePreview]._cmdID), visible ? TRUE : FALSE);
     }
-    if (visible && coordinator_) coordinator_->RefreshNow();
+    if (coordinator_) coordinator_->SetVisible(visible);
   });
   panel_->Create();
 
@@ -257,7 +260,7 @@ void PluginEntry::OnReady() {
   tTbData docking{};
   docking.hClient = panel_->Window();
   docking.pszName = kPluginName;
-  docking.dlgID = toggleCommandId;
+  docking.dlgID = kPreviewDockingFunctionIndex;
   docking.uMask = DWS_DF_CONT_RIGHT;
   docking.hIconTab = nullptr;
   docking.pszModuleName = L"NotepadViewerPlus.dll";
@@ -268,6 +271,7 @@ void PluginEntry::OnReady() {
   } else {
     SendMessage(nppData_._nppHandle, NPPM_DMMHIDE, 0, reinterpret_cast<LPARAM>(panel_->Window()));
   }
+  panel_->CompleteDockRegistration(panel_->IsVisible());
   UpdateMenuChecks();
 }
 
@@ -332,18 +336,16 @@ void PluginEntry::UpdateMenuChecks() {
 
 std::string PluginEntry::DirectoryTokenForPath(const std::wstring& path) {
   if (path.empty()) {
-    activeToken_.clear();
     return {};
   }
   const std::filesystem::path file(path);
   const std::wstring directory = file.parent_path().wstring();
   if (directory.empty()) {
-    activeToken_.clear();
     return {};
   }
-  activeToken_ = TokenFor(directory);
-  if (panel_) panel_->SetDocumentDirectory(activeToken_, directory);
-  return activeToken_;
+  const std::string token = TokenFor(directory);
+  if (panel_) panel_->SetDocumentDirectory(token, directory);
+  return token;
 }
 
 bool PluginEntry::LegacyInstallationConflict() {

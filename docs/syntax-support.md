@@ -34,6 +34,8 @@ Relative images and links use an opaque native directory token and are served on
 
 Markdown headings receive safe anchor IDs and a bounded table of contents (maximum 500 headings). The top-right list button opens the TOC in a right-side panel and toggles it without re-rendering the document. **Plugins → Notepad Viewer Plus → Toggle Table of Contents** controls the initial panel state for the active document. The renderer does not inject a second in-document TOC; any visible heading/list TOC in the document is authored Markdown content.
 
+To keep live preview responsive, Markdown rendering is limited to 1 MiB of UTF-8 source, 20,000 lines, and 20,000 rendered HTML tags. Exceeding a limit shows a warning and the complete source as plain text. Syntax highlighting is limited to 128 KiB per code block and 512 KiB across a preview; larger blocks remain readable without highlighting.
+
 ## Diagrams and math
 
 - `plantuml` and `puml` fences use the bundled MIT `@plantuml/core` runtime. Remote and arbitrary local `!include` directives are disabled.
@@ -41,9 +43,13 @@ Markdown headings receive safe anchor IDs and a bounded table of contents (maxim
 - Standalone Mermaid and PlantUML files are rendered as one diagram source.
 - `$...$`, `$$...$$`, and optional `\(...\)`/`\[...\]` delimiters use KaTeX with `trust: false`, bounded expansion, and local WOFF2 fonts. `math` fences are also supported.
 
+At most 200 math expressions are rendered per preview. Additional expressions retain their original source and produce a visible warning. Diagram renders remain serialized across document changes; cancelled results are discarded, while a healthy diagram engine is reused.
+
 ## Structured and tabular data
 
 JSON, YAML, and XML trees support expand/collapse, copy path/value, line wrapping, and a raw-source fallback. Input size, depth, node count, string length, and rendered nodes are bounded. XML DTD/entity declarations and external resolution are rejected.
+
+Copy values and the structured-data Code view are formatted when requested, avoiding duplicate serialized subtrees during ordinary preview rendering.
 
 CSV/TSV parsing supports RFC 4180-style quoted fields, escaped quotes, quoted newlines, delimiter detection, uneven rows, frozen headers, and a virtualized viewport. Formula-like values are inert text. Row, column, cell, and input limits produce a visible truncation warning.
 

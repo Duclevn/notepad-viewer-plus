@@ -17,6 +17,12 @@
 
 namespace mpp {
 
+// Dock visibility is owned by the panel child style.  IsWindowVisible also
+// considers hidden ancestors, which is transient during docking restoration.
+inline bool IsOwnWindowVisible(HWND window) noexcept {
+  return window && (GetWindowLongPtrW(window, GWL_STYLE) & WS_VISIBLE) != 0;
+}
+
 enum class PreviewState {
   Uninitialized,
   CreatingEnvironment,
@@ -38,6 +44,7 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   ~PreviewPanel();
 
   bool Create();
+  void CompleteDockRegistration(bool visible);
   void Dispose();
   void Resize();
   void QueueDocumentUpdate(DocumentUpdate update);
@@ -79,6 +86,7 @@ class PreviewPanel final : public std::enable_shared_from_this<PreviewPanel> {
   std::wstring assetsDirectory_;
   std::wstring userDataDirectory_;
   bool visible_{false};
+  bool dockRegistrationComplete_{false};
   PreviewState state_{PreviewState::Uninitialized};
   Settings settings_{};
   std::optional<DocumentUpdate> pendingUpdate_;

@@ -54,14 +54,16 @@ window.addEventListener("message", async (event: MessageEvent<unknown>) => {
     const marginWidth = pixelValue(style.marginLeft) + pixelValue(style.marginRight);
     const marginHeight = pixelValue(style.marginTop) + pixelValue(style.marginBottom);
     const layout = calculateMathFrameLayout(bounds, marginWidth, marginHeight);
-    port.postMessage({
-      ok: true,
-      width: layout.width,
-      height: layout.height
-    });
+    port.postMessage({ ok: true, width: layout.width, height: layout.height });
   } catch (error) {
-    port.postMessage({ ok: false, message: error instanceof Error ? error.message : "Math expression could not be rendered" });
+    try {
+      port.postMessage({ ok: false, message: error instanceof Error ? error.message : "Math expression could not be rendered" });
+    } finally {
+      port.close();
+    }
+    return;
   }
+  port.close();
 });
 
 window.parent.postMessage({ type: "math-frame.ready" }, "*");

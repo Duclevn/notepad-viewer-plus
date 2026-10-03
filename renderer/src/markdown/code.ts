@@ -1,3 +1,9 @@
+import {
+  MAX_HIGHLIGHT_BLOCK_BYTES,
+  MAX_HIGHLIGHT_TOTAL_BYTES,
+  utf8ByteLength
+} from "../performance/limits";
+
 export const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
   js: "javascript",
   javascript: "javascript",
@@ -79,12 +85,31 @@ export function renderCodeFence(language: string, content: string, escapeHtml: (
 export async function highlightCodeBlocks(root: ParentNode, isCurrent: () => boolean = () => true): Promise<void> {
   if (!isCurrent()) return;
   const elements = Array.from(root.querySelectorAll<HTMLElement>("[data-mpp-code][data-mpp-language]"));
-  const languages = new Set(
-    elements
-      .map((element) => element.dataset.mppLanguage)
-      .filter((value): value is string => typeof value === "string" && value in LANGUAGE_IMPORTS)
-  );
-  if (languages.size === 0) return;
+  const candidates: Array<{ element: HTMLElement; code: HTMLElement; language: string }> = [];
+  let totalBytes = 0;
+  let totalLimitReached = false;
+  for (const element of elements) {
+    const language = element.dataset.mppLanguage;
+    if (!language || !(language in LANGUAGE_IMPORTS)) continue;
+    const code = element.querySelector<HTMLElement>("code");
+    if (!code) continue;
+    const source = code.textContent ?? "";
+    const bytes = utf8ByteLength(source, MAX_HIGHLIGHT_BLOCK_BYTES);
+    if (bytes > MAX_HIGHLIGHT_BLOCK_BYTES) {
+      markHighlightSkipped(element, `code block exceeds ${formatBytes(MAX_HIGHLIGHT_BLOCK_BYTES)}`);
+      continue;
+    }
+    if (totalLimitReached || totalBytes + bytes > MAX_HIGHLIGHT_TOTAL_BYTES) {
+      totalLimitReached = true;
+      markHighlightSkipped(element, `document exceeds ${formatBytes(MAX_HIGHLIGHT_TOTAL_BYTES)} of code`);
+      continue;
+    }
+    totalBytes += bytes;
+    candidates.push({ element, code, language });
+  }
+  if (candidates.length === 0) return;
+
+  const languages = new Set(candidates.map(({ language }) => language));
 
   const hljsModule = await import("highlight.js/lib/core");
   if (!isCurrent()) return;
@@ -100,13 +125,23 @@ export async function highlightCodeBlocks(root: ParentNode, isCurrent: () => boo
     })
   );
 
-  for (const element of elements) {
+  for (const { code, language } of candidates) {
     if (!isCurrent()) return;
-    const language = element.dataset.mppLanguage;
     if (!language || !hljs.getLanguage(language)) continue;
-    const code = element.querySelector("code");
-    if (!code) continue;
     const result = hljs.highlight(code.textContent ?? "", { language, ignoreIllegals: true });
     code.innerHTML = result.value;
   }
+}
+
+function markHighlightSkipped(element: HTMLElement, reason: string): void {
+  const toolbar = element.querySelector<HTMLElement>(".mpp-code-toolbar");
+  if (!toolbar || toolbar.querySelector(".mpp-code-status")) return;
+  const status = document.createElement("span");
+  status.className = "mpp-code-status";
+  status.textContent = `Syntax highlighting skipped: ${reason}.`;
+  toolbar.appendChild(status);
+}
+
+function formatBytes(value: number): string {
+  return `${Math.round(value / 1024)} KiB`;
 }

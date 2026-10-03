@@ -100,13 +100,6 @@ bool ResourcePolicy::ResolveRelative(std::string_view token, std::string_view re
   return true;
 }
 
-bool ResourcePolicy::ResolveDocumentUri(std::wstring_view uri, std::wstring& absolute) const {
-  ResolvedResource resource;
-  if (!ResolveUri(uri, resource)) return false;
-  absolute = resource.absolutePath;
-  return true;
-}
-
 bool ResourcePolicy::ResolveUri(std::wstring_view uri, ResolvedResource& resource) const {
   if (uri.rfind(kExactFilePrefix, 0) == 0) {
     const std::wstring_view tokenWide = uri.substr(kExactFilePrefix.size());

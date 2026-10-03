@@ -52,6 +52,8 @@ set(NATIVE_SOURCES
   native/plugin/PluginCommands.h
   native/plugin/DocumentCoordinator.cpp
   native/plugin/DocumentCoordinator.h
+  native/plugin/LocalDocumentOpener.cpp
+  native/plugin/LocalDocumentOpener.h
   native/preview/PreviewPanel.cpp
   native/preview/ResourcePolicy.cpp
   native/bridge/MessageBroker.cpp
@@ -105,12 +107,14 @@ if(BUILD_TESTING)
     tests/native/OriginPolicyTests.cpp
     tests/native/NotepadMessageTests.cpp
     tests/native/PluginCommandTests.cpp
+    tests/native/LocalDocumentOpenerTests.cpp
     tests/native/ProtocolTests.cpp
     tests/native/ResourcePolicyTests.cpp
     native/bridge/JsonWriter.cpp
     native/bridge/MessageBroker.cpp
     native/plugin/PluginCommands.cpp
     native/plugin/DocumentCoordinator.cpp
+    native/plugin/LocalDocumentOpener.cpp
     native/preview/ResourcePolicy.cpp
     native/settings/SettingsService.cpp
   )

@@ -1,6 +1,7 @@
 import { GenerationGate, RendererBridge } from "../bridge/bridge";
 import { makeRenderCompleteMessage, makeRenderErrorMessage, type PreviewUpdate } from "../bridge/protocol";
 import { bindResourceEvents } from "../security/resource-policy";
+import { getCopyValue } from "../viewers/copy-values";
 import { ViewerRegistry } from "../viewers/registry";
 import { resolveEffectiveTheme, shouldRefreshForSystemTheme, systemThemeQuery } from "./theme";
 import "./styles.css";
@@ -47,9 +48,21 @@ export class ViewerShell {
       if (!target) return;
       const codeId = target.dataset.copyCode;
       const code = codeId ? this.previewElement.querySelector<HTMLElement>(`[data-mpp-code="${codeId}"] code`) : undefined;
-      const value = codeId ? code?.textContent ?? "" : target.dataset.mppCopyValue ?? "";
-      if (!value && !code) return;
-      void this.copyValue(value, target);
+      if (codeId) {
+        if (!code) return;
+        void this.copyValue(code.textContent ?? "", target);
+        return;
+      }
+      try {
+        const value = getCopyValue(target);
+        if (value === undefined) {
+          this.showWarning("The selected value is no longer available for copying.");
+          return;
+        }
+        void this.copyValue(value, target);
+      } catch (error) {
+        this.showWarning(error instanceof Error ? error.message : "The selected value could not be copied.");
+      }
     });
   }
 
@@ -66,7 +79,6 @@ export class ViewerShell {
     this.previewElement.classList.toggle("mpp-no-wrap", !update.settings.codeWrapping);
     this.setStatus("Rendering…", "loading");
     const scroll = captureScroll();
-    this.registry.dispose();
 
     try {
       const result = await this.registry.render({
@@ -92,8 +104,9 @@ export class ViewerShell {
   }
 
   public dispose(): void {
+    this.renderSequence += 1;
     this.themeQuery?.removeEventListener("change", this.onSystemThemeChange);
-    this.registry.dispose();
+    this.registry.dispose(this.previewElement);
     this.bridge.stop();
   }
 

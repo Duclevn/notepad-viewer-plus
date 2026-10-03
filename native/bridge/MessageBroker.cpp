@@ -109,12 +109,12 @@ void WriteSettings(JsonWriter& writer, const RendererSettings& settings) {
 
 }  // namespace
 
-void MessageBroker::Attach(ComPtr<ICoreWebView2> webview) {
+bool MessageBroker::Attach(ComPtr<ICoreWebView2> webview) {
   Detach();
   webview_ = std::move(webview);
-  if (!webview_) return;
+  if (!webview_) return false;
   const std::weak_ptr<MessageBroker> weakSelf = weak_from_this();
-  webview_->add_WebMessageReceived(
+  const HRESULT result = webview_->add_WebMessageReceived(
       Callback<ICoreWebView2WebMessageReceivedEventHandler>(
           [weakSelf](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) {
             if (const auto self = weakSelf.lock()) self->OnWebMessage(args);
@@ -122,6 +122,11 @@ void MessageBroker::Attach(ComPtr<ICoreWebView2> webview) {
           })
           .Get(),
       &messageToken_);
+  if (FAILED(result)) {
+    Detach();
+    return false;
+  }
+  return true;
 }
 
 void MessageBroker::Detach() {

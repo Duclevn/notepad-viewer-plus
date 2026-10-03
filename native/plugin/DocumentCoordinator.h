@@ -31,6 +31,7 @@ class DocumentCoordinator final {
   void SetResourceRevocationHandler(ResourceRevocationHandler handler);
   void SetTooLargeHandler(TooLargeHandler handler);
   void SetSettings(Settings settings);
+  void SetVisible(bool visible);
   void OnNotification(const SCNotification* notification);
   void RefreshNow();
   void Stop();
@@ -63,6 +64,7 @@ class DocumentCoordinator final {
   TooLargeHandler tooLarge_;
   unsigned long long generation_{0};
   bool scheduled_{false};
+  bool visible_{false};
   bool stopped_{false};
 };
 

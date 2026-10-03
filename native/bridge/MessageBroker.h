@@ -61,8 +61,6 @@ struct DocumentUpdate {
   RendererSettings settings;
 };
 
-using PreviewUpdate = DocumentUpdate;
-
 // Returns an empty view when valid, otherwise a stable diagnostic reason.
 std::string_view ValidateDocumentUpdate(const DocumentUpdate& update);
 // Returns an empty string when the update violates the native protocol bounds.
@@ -77,7 +75,7 @@ class MessageBroker final : public std::enable_shared_from_this<MessageBroker> {
   using ErrorHandler = std::function<void(unsigned long long, const std::string&)>;
   using ProtocolMismatchHandler = std::function<void()>;
 
-  void Attach(Microsoft::WRL::ComPtr<ICoreWebView2> webview);
+  bool Attach(Microsoft::WRL::ComPtr<ICoreWebView2> webview);
   void Detach();
   void SetHandlers(ReadyHandler ready, LinkHandler link, LocalResourceHandler localResource,
                    CompleteHandler complete, ErrorHandler error, ProtocolMismatchHandler mismatch = {});

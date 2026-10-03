@@ -1,4 +1,5 @@
 import { DiagramRenderer, type DiagramEngine, type DiagramPlaceholder } from "../diagrams/diagrams";
+import { releaseAllOwnedObjectUrls, releaseOwnedObjectUrls } from "../object-urls";
 import type { ViewerAdapter, ViewerContext, ViewerResult } from "./types";
 
 export class DiagramViewer implements ViewerAdapter {
@@ -16,6 +17,9 @@ export class DiagramViewer implements ViewerAdapter {
 
   public async render(context: ViewerContext): Promise<ViewerResult> {
     if (context.update.source.kind !== "text") throw new Error(`${this.id} viewer requires a text source`);
+    this.diagrams.cancelCurrentUpdate();
+    releaseOwnedObjectUrls(context.root);
+    releaseAllOwnedObjectUrls();
     const id = `standalone-${this.id}-${context.update.generation}`;
     const placeholder: DiagramPlaceholder = {
       id,

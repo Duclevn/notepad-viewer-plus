@@ -5,6 +5,7 @@ import { detectDelimiter, parseDelimited } from "../src/viewers/delimited-viewer
 import { HtmlViewer } from "../src/viewers/html-viewer";
 import { MarkdownViewer } from "../src/viewers/markdown-viewer";
 import { sanitizeOpenApiValue, StructuredDataViewer, validateOpenApiRefs } from "../src/viewers/structured-viewer";
+import { getCopyValue } from "../src/viewers/copy-values";
 import { ViewerRegistry } from "../src/viewers/registry";
 import { sanitizeStandaloneSvg } from "../src/security/sanitize";
 import { PdfViewer } from "../src/viewers/binary-viewers";
@@ -132,7 +133,8 @@ describe("Phase 2 viewers", () => {
     // Copy buttons have valid copy values
     const copyBtns = root.querySelectorAll<HTMLButtonElement>("button[data-mpp-copy-value]");
     expect(copyBtns.length).toBeGreaterThan(0);
-    expect(copyBtns[0]?.dataset.mppCopyValue).toBeDefined();
+    expect(copyBtns[0]?.dataset.mppCopyValue).toBe("");
+    expect(getCopyValue(copyBtns[0]!)).toBeDefined();
 
     // Tab switcher
     const treeTab = root.querySelector<HTMLButtonElement>(".mpp-view-tab[data-mpp-view='tree']");
@@ -142,10 +144,12 @@ describe("Phase 2 viewers", () => {
 
     expect(treePane?.hidden).toBe(false);
     expect(codePane?.hidden).toBe(true);
+    expect(codePane?.childElementCount).toBe(0);
 
     codeTab?.click();
     expect(treePane?.hidden).toBe(true);
     expect(codePane?.hidden).toBe(false);
+    expect(codePane?.childElementCount).toBe(1);
 
     treeTab?.click();
     expect(treePane?.hidden).toBe(false);
@@ -185,8 +189,9 @@ describe("Phase 2 viewers", () => {
       isCurrent: () => true
     });
     const complexCopy = Array.from(root.querySelectorAll<HTMLButtonElement>("button[data-mpp-copy-value]"))
-      .find((b) => b.title === "Copy JSONPath" && b.dataset.mppCopyValue?.includes("complex.key"));
-    expect(complexCopy?.dataset.mppCopyValue).toBe('$["complex.key"]');
+      .find((b) => b.title === "Copy JSONPath" && b.getAttribute("aria-label")?.includes("complex.key"));
+    expect(complexCopy?.dataset.mppCopyValue).toBe("");
+    expect(getCopyValue(complexCopy!)).toBe('$["complex.key"]');
   });
 
   it("rejects XML DTDs and remote OpenAPI references", async () => {

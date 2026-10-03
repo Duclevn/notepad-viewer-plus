@@ -6,6 +6,14 @@ import { parseFrontMatter, type FrontMatterResult } from "./front-matter";
 import { installGitHubCompatibility } from "./github";
 import { installMathPlugin, type MathPlaceholder } from "./math";
 import { installDiagramPlugin, type DiagramPlaceholder } from "../diagrams/diagrams";
+import {
+  exceedsLineLimit,
+  exceedsUtf8ByteLimit,
+  MAX_MARKDOWN_LINES,
+  MAX_MARKDOWN_RENDERED_TAGS,
+  MAX_MARKDOWN_SOURCE_BYTES,
+  MAX_MATH_EXPRESSIONS
+} from "../performance/limits";
 import { escapeText, sanitizeHtml } from "../security/sanitize";
 
 export interface TableOfContentsEntry {
@@ -22,15 +30,26 @@ export interface RenderResult {
   diagrams: DiagramPlaceholder[];
   toc: TableOfContentsEntry[];
   hasHighlightedCode: boolean;
+  fallback?: string;
+  warnings?: string[];
 }
 
 export class MarkdownPipeline {
-  public async render(update: DocumentUpdate): Promise<RenderResult> {
+  public async render(update: DocumentUpdate, isCurrent: () => boolean = () => true): Promise<RenderResult> {
     const text = textSource(update);
     if (text === undefined) throw new Error("Markdown viewer requires a text source");
+    const preflightFailure = markdownPreflightFailure(text);
+    if (preflightFailure) return fallbackResult(update.generation, text, preflightFailure);
+    if (!isCurrent()) return emptyResult(update.generation, text);
+
+    await yieldToRenderer();
+    if (!isCurrent()) return emptyResult(update.generation, text);
     const frontMatter = await parseFrontMatter(text);
+    if (!isCurrent()) return emptyResult(update.generation, text, frontMatter);
     const source = frontMatter.hasFrontMatter ? frontMatter.body : text;
     const normalized = normalizeAdmonitions(source);
+    await yieldToRenderer();
+    if (!isCurrent()) return emptyResult(update.generation, text, frontMatter);
     const math: MathPlaceholder[] = [];
     const diagrams: DiagramPlaceholder[] = [];
     const headings: TableOfContentsEntry[] = [];
@@ -73,15 +92,27 @@ export class MarkdownPipeline {
       return renderCodeFence(language, token.content, md.utils.escapeHtml, `${update.generation}-${codeSequence++}`);
     };
     installDiagramPlugin(md, diagrams, update.generation);
-    installMathPlugin(md, math, {
+    const installedMath = installMathPlugin(md, math, {
       alternateDelimiters: update.settings.mathAlternateDelimiters,
       generation: update.generation
     });
 
-    const bodyHtml = sanitizeHtml(md.render(normalized.source), update.settings.rawHtml);
+    const rawBodyHtml = md.render(normalized.source);
+    if (!isCurrent()) return emptyResult(update.generation, text, frontMatter);
     const metadata = this.renderFrontMatter(frontMatter, update.settings.showFrontMatter);
     const warning = frontMatter.warning ? `<div class="mpp-warning" role="alert">${escapeText(frontMatter.warning)}</div>` : "";
+    const rawHtml = `${warning}${metadata}${rawBodyHtml}`;
+    if (countMarkupTags(rawHtml, MAX_MARKDOWN_RENDERED_TAGS) > MAX_MARKDOWN_RENDERED_TAGS) {
+      return fallbackResult(update.generation, text, "Markdown output exceeds the renderer element limit", frontMatter);
+    }
+    await yieldToRenderer();
+    if (!isCurrent()) return emptyResult(update.generation, text, frontMatter);
+    const bodyHtml = sanitizeHtml(rawBodyHtml, update.settings.rawHtml);
     const html = `${warning}${metadata}${bodyHtml}`;
+    const skippedMath = installedMath?.skipped ?? 0;
+    const warnings = skippedMath > 0
+      ? [`Math rendering was limited to ${MAX_MATH_EXPRESSIONS} expressions; ${skippedMath} additional expression(s) remain as text.`]
+      : undefined;
 
     return {
       generation: update.generation,
@@ -90,7 +121,8 @@ export class MarkdownPipeline {
       math,
       diagrams,
       toc: headings,
-      hasHighlightedCode: codeSequence > 0
+      hasHighlightedCode: codeSequence > 0,
+      ...(warnings ? { warnings } : {})
     };
   }
 
@@ -105,6 +137,90 @@ export class MarkdownPipeline {
     ).join("");
     return `<table class="mpp-front-matter" aria-label="Front matter"><tbody>${rows}</tbody></table>`;
   }
+}
+
+function markdownPreflightFailure(source: string): string | undefined {
+  if (exceedsUtf8ByteLimit(source, MAX_MARKDOWN_SOURCE_BYTES)) {
+    return "Markdown source exceeds the 1 MiB renderer limit";
+  }
+  if (exceedsLineLimit(source, MAX_MARKDOWN_LINES)) {
+    return "Markdown source exceeds the 20,000-line renderer limit";
+  }
+  if (exceedsMarkdownComplexity(source)) {
+    return "Markdown source exceeds the renderer complexity limit";
+  }
+  return undefined;
+}
+
+function exceedsMarkdownComplexity(source: string): boolean {
+  const maximumMarkers = MAX_MARKDOWN_RENDERED_TAGS * 8;
+  let markers = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    switch (source.charCodeAt(index)) {
+      case 0x23: // #
+      case 0x2a: // *
+      case 0x3c: // <
+      case 0x5b: // [
+      case 0x5c: // \
+      case 0x60: // `
+      case 0x7c: // |
+      case 0x7e: // ~
+        markers += 1;
+        if (markers > maximumMarkers) return true;
+        break;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
+function countMarkupTags(html: string, stopAfter: number): number {
+  const tags = /<\/?[A-Za-z][^>]*>/gu;
+  let count = 0;
+  while (tags.exec(html)) {
+    count += 1;
+    if (count > stopAfter) return count;
+  }
+  return count;
+}
+
+function fallbackResult(
+  generation: number,
+  source: string,
+  reason: string,
+  frontMatter = emptyFrontMatter(source)
+): RenderResult {
+  return {
+    generation,
+    html: "",
+    frontMatter,
+    math: [],
+    diagrams: [],
+    toc: [],
+    hasHighlightedCode: false,
+    fallback: reason
+  };
+}
+
+function emptyResult(generation: number, source: string, frontMatter = emptyFrontMatter(source)): RenderResult {
+  return {
+    generation,
+    html: "",
+    frontMatter,
+    math: [],
+    diagrams: [],
+    toc: [],
+    hasHighlightedCode: false
+  };
+}
+
+function emptyFrontMatter(source: string): FrontMatterResult {
+  return { hasFrontMatter: false, body: source, raw: "" };
+}
+
+async function yieldToRenderer(): Promise<void> {
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 }
 
 const MAX_METADATA_ITEMS = 100;

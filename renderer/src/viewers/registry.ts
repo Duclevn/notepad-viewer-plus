@@ -1,5 +1,6 @@
 import type { ViewerFormat } from "../bridge/protocol";
 import { DiagramRenderer } from "../diagrams/diagrams";
+import { releaseAllOwnedObjectUrls, releaseOwnedObjectUrls } from "../object-urls";
 import { DelimitedViewer } from "./delimited-viewer";
 import { ImageViewer, PdfViewer } from "./binary-viewers";
 import { DiagramViewer } from "./diagram-viewer";
@@ -37,13 +38,21 @@ export class ViewerRegistry {
   }
 
   public async render(context: ViewerContext): Promise<ViewerResult> {
+    this.cancelCurrentUpdate(context.root);
     const adapter = this.resolve(context);
     context.root.dataset.mppThemeBehavior = adapter.themeBehavior;
     return adapter.render(context);
   }
 
-  public dispose(): void {
+  public cancelCurrentUpdate(root?: ParentNode): void {
+    this.diagrams.cancelCurrentUpdate();
     for (const adapter of this.adapters) adapter.dispose();
+    if (root) releaseOwnedObjectUrls(root);
+    releaseAllOwnedObjectUrls();
+  }
+
+  public dispose(root?: ParentNode): void {
+    this.cancelCurrentUpdate(root);
     this.diagrams.dispose();
   }
 

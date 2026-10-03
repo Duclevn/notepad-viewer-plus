@@ -1,6 +1,6 @@
 {
   "name": "notepad-viewer-plus-renderer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Offline multi-format renderer used by the Notepad Viewer Plus Notepad++ plugin",
   "type": "module",

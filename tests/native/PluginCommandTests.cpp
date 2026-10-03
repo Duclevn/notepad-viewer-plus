@@ -23,6 +23,10 @@ bool RunPluginCommandTests() {
     std::cerr << "Plugin command indexes changed unexpectedly\n";
     return false;
   }
+  if (kPreviewDockingFunctionIndex != CommandId::TogglePreview) {
+    std::cerr << "Docking persistence must use the zero-based toggle funcItem index\n";
+    return false;
+  }
 
   FuncItem functions[CommandCount]{};
   ShortcutKey shortcut{true, true, false, 'P'};

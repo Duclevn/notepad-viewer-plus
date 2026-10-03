@@ -9,7 +9,7 @@ node packaging/sync-version.mjs --write
 node packaging/sync-version.mjs --check
 ```
 
-Notepad Viewer Plus 0.3.0 targets separate x64 and x86 packages. ARM64 is not supported. The dark-mode toolbar API requires Notepad++ 8.0 or newer; the final Plugin List compatibility range must not be published until that range has been smoke-tested. The WebView2 Evergreen Runtime is a prerequisite and is not bundled.
+Notepad Viewer Plus 0.4.0 targets separate x64 and x86 packages. ARM64 is not supported. The dark-mode toolbar API requires Notepad++ 8.0 or newer; the final Plugin List compatibility range must not be published until that range has been smoke-tested. The WebView2 Evergreen Runtime is a prerequisite and is not bundled.
 
 ## Build and package
 
@@ -44,7 +44,7 @@ cpack --config build-release-x86/CPackConfig.cmake -C Release
 Each ZIP keeps the Plugin Admin root-DLL layout:
 
 ```text
-NotepadViewerPlus-0.3.0-x64.zip
+NotepadViewerPlus-0.4.0-x64.zip
 ├── NotepadViewerPlus.dll
 ├── THIRD-PARTY-LICENSES.txt
 └── assets/
@@ -60,12 +60,12 @@ The strict size check is separate from structural package validation:
 
 ```text
 cd renderer
-npm run size:strict -- ../NotepadViewerPlus-0.3.0-x64.zip
-npm run size:strict -- ../NotepadViewerPlus-0.3.0-x86.zip
+npm run size:strict -- ../NotepadViewerPlus-0.4.0-x64.zip
+npm run size:strict -- ../NotepadViewerPlus-0.4.0-x86.zip
 cd ..
 
-powershell -NoProfile -ExecutionPolicy Bypass -File packaging/plugin-admin/validate-package.ps1 -ZipPath NotepadViewerPlus-0.3.0-x64.zip -Architecture x64 -ReportPath release/x64-validation.json
-powershell -NoProfile -ExecutionPolicy Bypass -File packaging/plugin-admin/validate-package.ps1 -ZipPath NotepadViewerPlus-0.3.0-x86.zip -Architecture x86 -ReportPath release/x86-validation.json
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging/plugin-admin/validate-package.ps1 -ZipPath NotepadViewerPlus-0.4.0-x64.zip -Architecture x64 -ReportPath release/x64-validation.json
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging/plugin-admin/validate-package.ps1 -ZipPath NotepadViewerPlus-0.4.0-x86.zip -Architecture x86 -ReportPath release/x86-validation.json
 ```
 
 Custom `-ReportPath` values are overwrite targets: never use the ZIP path or another valuable existing file. The default `<ZIP>.validation.json` report path is the safe option used by `Build-Development.ps1`. This pre-existing custom-output safety limitation is documented in [OneDrive development](../../docs/onedrive-development.md).
@@ -77,7 +77,7 @@ Generate Plugin List metadata only from a fresh validator report. The generator 
 ```text
 node packaging/plugin-admin/generate-entry.mjs ^
   --report=release/x64-validation.json ^
-  --repository=https://github.com/<owner>/<repo>/releases/download/v0.3.0/NotepadViewerPlus-0.3.0-x64.zip ^
+  --repository=https://github.com/<owner>/<repo>/releases/download/v0.4.0/NotepadViewerPlus-0.4.0-x64.zip ^
   --homepage=https://ducle.uk ^
   --npp-compatible-versions=<tested-range>
 ```
@@ -94,7 +94,7 @@ Extract the matching package into:
 
 The DLL must be at `<Notepad++>\plugins\NotepadViewerPlus\NotepadViewerPlus.dll`. Restart Notepad++ after extraction. The x86 ZIP is only for 32-bit Notepad++; the x64 ZIP is only for 64-bit Notepad++.
 
-For the local x64 candidate, close Notepad++ and run `Install-NotepadViewerPlus-0.3.0.ps1`. The installer validates the essential payload, requests elevation when needed, and preserves the previous plugin directory as a rollback backup. Use `-ZipPath`, `-NotepadRoot`, or `-TargetDir` for another package or installation.
+For the local x64 candidate, close Notepad++ and run `Install-NotepadViewerPlus-0.4.0.ps1`. The installer validates the essential payload, requests elevation when needed, and preserves the previous plugin directory as a rollback backup. Use `-ZipPath`, `-NotepadRoot`, or `-TargetDir` for another package or installation.
 
 ## Toolbar artwork provenance
 

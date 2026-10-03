@@ -35,6 +35,10 @@ Directory resources use a constrained opaque token and native canonical-path che
 
 Relative image/link paths are rejected if absolute, scheme-bearing, traversal-containing, or outside the canonical document directory. Only HTTP/HTTPS links are offered to the system browser. `javascript:`, `file:`, unknown schemes, HTTP images, and remote images when the setting is off are blocked. The native About dialog validates its hyperlink against the exact `https://ducle.uk` target before calling `ShellExecuteW`; it does not accept renderer-provided URLs.
 
+Contained local links must resolve to regular files. They open as documents through Notepad++'s `NPPM_DOOPEN`; local links never invoke Windows file associations. Scripts and executables therefore open for inspection instead of running, and directory links are rejected.
+
+Closing the preview cancels pending refreshes and revokes document resources. Hidden document notifications do not read or serialize Scintilla text. Opening the panel takes one fresh snapshot, including when automatic refresh is disabled. A new hidden panel defers WebView2 initialization until first use, while a restored visible dock initializes normally. Navigation and resource handlers must be registered successfully before the application is navigated.
+
 ## Offline invariant
 
 The production renderer packages all runtime dependencies, CSS, fonts, Mermaid Tiny, and PlantUML locally. The default renderer makes no network requests. PlantUML remote includes and arbitrary standard-library downloads are rejected. The built-in WebView2 PDF path still requires manual compatibility smoke testing before release sign-off, including range requests and replacement/revocation behavior.

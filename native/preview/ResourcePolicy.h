@@ -28,7 +28,6 @@ class ResourcePolicy final {
   void RevokeAll();
 
   bool ResolveRelative(std::string_view token, std::string_view relative, std::wstring& absolute) const;
-  bool ResolveDocumentUri(std::wstring_view uri, std::wstring& absolute) const;
   bool ResolveUri(std::wstring_view uri, ResolvedResource& resource) const;
   bool IsExactFileUri(std::wstring_view uri) const;
 

@@ -14,10 +14,6 @@ namespace mpp {
 namespace {
 
 constexpr unsigned kUtf8CodePage = 65001;
-constexpr std::size_t kDefaultStructuredBytes = 10u * 1024u * 1024u;
-constexpr unsigned kDefaultCsvRows = 10000;
-constexpr unsigned kDefaultCsvColumns = 100;
-constexpr std::size_t kDefaultCsvCellBytes = 64u * 1024u;
 
 std::string LowerAscii(std::string value) {
   for (char& character : value) {
@@ -47,6 +43,22 @@ void DocumentCoordinator::SetResourceActivationHandler(ResourceActivationHandler
 void DocumentCoordinator::SetResourceRevocationHandler(ResourceRevocationHandler handler) { revokeResources_ = std::move(handler); }
 void DocumentCoordinator::SetTooLargeHandler(TooLargeHandler handler) { tooLarge_ = std::move(handler); }
 void DocumentCoordinator::SetSettings(Settings settings) { settings_ = std::move(settings); }
+void DocumentCoordinator::SetVisible(bool visible) {
+  if (stopped_ || visible_ == visible) return;
+  visible_ = visible;
+  if (!visible_) {
+    KillTimer(notepadWindow_, kDebounceTimerId);
+    scheduled_ = false;
+    if (revokeResources_) revokeResources_();
+    ++generation_;
+    return;
+  }
+
+  // Showing the dock always gets one current snapshot, including when
+  // automatic refresh is disabled.  This is the only hidden-to-visible work
+  // trigger, so repeated show notifications cannot duplicate the refresh.
+  RefreshNow();
+}
 
 void DocumentCoordinator::OnNotification(const SCNotification* notification) {
   if (stopped_ || !notification) return;
@@ -76,9 +88,13 @@ void DocumentCoordinator::OnNotification(const SCNotification* notification) {
 }
 
 void DocumentCoordinator::RefreshNow() {
-  if (stopped_ || !update_) return;
+  if (stopped_) return;
   KillTimer(notepadWindow_, kDebounceTimerId);
   scheduled_ = false;
+  if (!visible_ || !update_) {
+    ++generation_;
+    return;
+  }
   ++generation_;
   update_(Snapshot());
 }
@@ -95,7 +111,8 @@ void CALLBACK DocumentCoordinator::TimerProc(HWND, UINT, UINT_PTR timerId, DWORD
 }
 
 void DocumentCoordinator::Schedule() {
-  if (stopped_ || !settings_.autoRefresh || !update_) return;
+  if (stopped_ || !update_) return;
+  if (!visible_ || !settings_.autoRefresh) return;
   scheduled_ = true;
   KillTimer(notepadWindow_, kDebounceTimerId);
   SetTimer(notepadWindow_, kDebounceTimerId, std::clamp(settings_.debounceMilliseconds, 100u, 1000u), &TimerProc);
@@ -105,6 +122,10 @@ void DocumentCoordinator::FireDebounced() {
   if (!scheduled_ || stopped_) return;
   KillTimer(notepadWindow_, kDebounceTimerId);
   scheduled_ = false;
+  if (!visible_) {
+    ++generation_;
+    return;
+  }
   ++generation_;
   if (update_) update_(Snapshot());
 }
@@ -207,13 +228,19 @@ std::string DocumentCoordinator::ReadUtf8(HWND editor) const {
   if (!editor) return {};
   const LRESULT length = SendMessageW(editor, SCI_GETTEXTLENGTH, 0, 0);
   if (length <= 0) return {};
-  std::vector<char> buffer(static_cast<std::size_t>(length) + 1, '\0');
+  std::string buffer(static_cast<std::size_t>(length) + 1, '\0');
   SendMessageW(editor, SCI_GETTEXT, static_cast<WPARAM>(buffer.size()), reinterpret_cast<LPARAM>(buffer.data()));
   const unsigned codePage = static_cast<unsigned>(SendMessageW(editor, SCI_GETCODEPAGE, 0, 0));
-  if (codePage == kUtf8CodePage || codePage == 0) return std::string(buffer.data(), static_cast<std::size_t>(length));
+  if (codePage == kUtf8CodePage || codePage == 0) {
+    buffer.resize(static_cast<std::size_t>(length));
+    return buffer;
+  }
 
   const int wideLength = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, buffer.data(), static_cast<int>(length), nullptr, 0);
-  if (wideLength <= 0) return std::string(buffer.data(), static_cast<std::size_t>(length));
+  if (wideLength <= 0) {
+    buffer.resize(static_cast<std::size_t>(length));
+    return buffer;
+  }
   std::wstring wide(static_cast<std::size_t>(wideLength), L'\0');
   if (MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, buffer.data(), static_cast<int>(length), wide.data(), wideLength) <= 0) return {};
   const int utf8Length = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), wideLength, nullptr, 0, nullptr, nullptr);
